@@ -2,12 +2,64 @@ import logging
 from base64 import urlsafe_b64encode
 
 from satosa.context import Context
+from satosa.logging_util import satosa_logging
 
 from .base import RequestMicroService
 from ..exception import SATOSAConfigurationError
 from ..exception import SATOSAError
 
+
 logger = logging.getLogger(__name__)
+
+
+class DecideBackendByTarget(RequestMicroService):
+    """
+    Select which backend should be used based on who is the SAML IDP
+    """
+
+    def __init__(self, config, *args, **kwargs):
+        """
+        Constructor.
+        :param config: mapping from requester identifier to
+        backend module name under the key 'requester_mapping'
+        :type config: Dict[str, Dict[str, str]]
+        """
+        super().__init__(*args, **kwargs)
+        self.target_mapping = config['target_mapping']
+
+
+    def get_backend_by_endpoint_path(self, context, native_backend,
+                                     backends):
+        """
+        Returns a new path and target_backend according to its maps
+
+        :type context: satosa.context.Context
+        :rtype: ((satosa.context.Context, Any) -> Any, Any)
+
+        :param context: The request context
+        :param native_backed: the backed that the proxy normally have been used
+        :param backends: list of all the backend configured in the proxy
+
+        :return: tuple or None
+        """
+        entity_id = context.request.get('entityID')
+        if not entity_id:
+            return
+        if entity_id not in self.target_mapping.keys():
+            return
+
+        tr_backend = self.target_mapping[entity_id]
+        tr_path = context.path.replace(native_backend, tr_backend)
+        for endpoint in backends[tr_backend]['endpoints']:
+            # remove regex trailing chars
+            if tr_path == endpoint[0].strip('^').strip('$'):
+                msg = ('Found DecideBackendByTarget ({} microservice ) '
+                       'redirecting {} backend to {}').format(self.name,
+                                                              native_backend,
+                                                              tr_backend)
+                satosa_logging(logger, logging.DEBUG, msg, context.state)
+                return (tr_backend, tr_path)
+        return
 
 
 class DecideBackendByRequester(RequestMicroService):
