@@ -8,6 +8,7 @@ import random
 import string
 import xml.dom.minidom
 import zlib
+import saml2.xmldsig
 
 from satosa.logging_util import satosa_logging
 from xml.parsers.expat import ExpatError
@@ -15,6 +16,22 @@ from xml.parsers.expat import ExpatError
 
 logger = logging.getLogger(__name__)
 
+
+def xmldsig_validate_w3c_format(alg_value):
+    """
+    Map a w3c alg format to a xmldsig attribute name
+    this function could be also used to implement other validations
+    on matching
+
+    :type value: str
+    :type allowed_alg_list: list
+    """
+    for allowed_list in (saml2.xmldsig.SIG_ALLOWED_ALG,
+                         saml2.xmldsig.DIGEST_ALLOWED_ALG):
+        for alg_tuple in allowed_list:
+            if alg_value == alg_tuple[1]:
+                return alg_tuple[0]
+    return alg_value
 
 
 def repr_saml(saml_str, b64=False):

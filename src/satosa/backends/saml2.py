@@ -166,12 +166,13 @@ class SAMLBackend(BackendModule, SAMLBaseModule):
 
         # options to be optionally filled in this
         kwargs = {}
-
-        # put desidered sign digest algs in kwargs
+        # backend support for selectable sign/digest algs
         for alg in ('sign_alg', 'digest_alg'):
             selected_alg = self.config['sp_config']['service']['sp'].get(alg)
             if not selected_alg: continue
-            kwargs[alg] = getattr(saml2.xmldsig, selected_alg)
+            kwargs[alg] = getattr(saml2.xmldsig,
+                                  util.xmldsig_validate_w3c_format(selected_alg))
+
 
         authn_context = self.construct_requested_authn_context(entity_id)
         if authn_context:
