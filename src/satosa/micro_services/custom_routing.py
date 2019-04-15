@@ -5,8 +5,9 @@ from satosa.context import Context
 from satosa.logging_util import satosa_logging
 
 from .base import RequestMicroService
-from ..exception import SATOSAConfigurationError
-from ..exception import SATOSAError
+from ..exception import (SATOSAConfigurationError,
+                         SATOSAError,
+                         SATOSABackendNotFoundError)
 
 
 logger = logging.getLogger(__name__)
@@ -43,12 +44,16 @@ class DecideBackendByTarget(RequestMicroService):
         :return: tuple or None
         """
         entity_id = context.request.get('entityID')
+        tr_backend = self.target_mapping[entity_id]
+
         if not entity_id:
             return
         if entity_id not in self.target_mapping.keys():
             return
+        if not backends.get(tr_backend):
+            raise SATOSABackendNotFoundError("'{}' not found in "
+                                             "proxy_conf.yaml".format(tr_backend))
 
-        tr_backend = self.target_mapping[entity_id]
         tr_path = context.path.replace(native_backend, tr_backend)
         for endpoint in backends[tr_backend]['endpoints']:
             # remove regex trailing chars
