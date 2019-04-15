@@ -45,12 +45,18 @@ class DecideBackendByTarget(RequestMicroService):
         :return: tuple or None
         """
         entity_id = context.request.get('entityID')
-        tr_backend = self.target_mapping[entity_id]
+        tr_backend = self.target_mapping.get(entity_id)
 
         if not entity_id:
             return
         if entity_id not in self.target_mapping.keys():
             return
+        if not tr_backend:
+            return
+
+        if not backends.get(tr_backend):
+            raise SATOSABackendNotFoundError("'{}' not found in "
+                                             "proxy_conf.yaml".format(tr_backend))
 
         if not backends.get(tr_backend):
             raise SATOSABackendNotFoundError("'{}' not found in "
