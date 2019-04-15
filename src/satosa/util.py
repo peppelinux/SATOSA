@@ -1,61 +1,16 @@
 """
 Python package file for util functions.
 """
-import base64
 import hashlib
 import logging
 import random
 import string
-import xml.dom.minidom
-import zlib
-import saml2.xmldsig
 
 from satosa.logging_util import satosa_logging
-from xml.parsers.expat import ExpatError
 
 
 logger = logging.getLogger(__name__)
 
-
-def xmldsig_validate_w3c_format(alg_value):
-    """
-    Map a w3c alg format to a xmldsig attribute name
-    this function could be also used to implement other validations
-    on matching
-
-    :type value: str
-    :type allowed_alg_list: list
-    """
-    for allowed_list in (saml2.xmldsig.SIG_ALLOWED_ALG,
-                         saml2.xmldsig.DIGEST_ALLOWED_ALG):
-        for alg_tuple in allowed_list:
-            if alg_value == alg_tuple[1]:
-                return alg_tuple[0]
-    return alg_value
-
-
-def repr_saml(saml_str, b64=False):
-    """
-    Decode SAML from b64 and b64 deflated and
-    return a pretty printed representation.
-
-    If b64 is True saml_str must be encoded
-
-    :type saml_str: str
-    :type b64: bool
-    """
-    # needed for '' string
-    if not saml_str: return saml_str
-
-    try:
-        msg = base64.b64decode(saml_str).decode() if b64 else saml_str
-        dom = xml.dom.minidom.parseString(msg)
-    except (UnicodeDecodeError, ExpatError):
-        # in HTTP-REDIRECT the base64 must be inflated
-        msg = base64.b64decode(saml_str)
-        inflated = zlib.decompress(msg, -15)
-        dom = xml.dom.minidom.parseString(inflated.decode())
-    return dom.toprettyxml()
 
 def hash_data(salt, value, hash_alg=None):
     """

@@ -37,7 +37,6 @@ from satosa.internal import InternalData
 from satosa.deprecated import saml_name_id_format_to_hash_type
 from satosa.deprecated import hash_type_to_saml_name_id_format
 
-from ..util import repr_saml
 
 logger = logging.getLogger(__name__)
 
@@ -187,7 +186,7 @@ class SAMLFrontend(FrontendModule, SAMLBaseModule):
         """
         req_info = idp.parse_authn_request(context.request["SAMLRequest"], binding_in)
         authn_req = req_info.message
-        satosa_logging(logger, logging.DEBUG, "%s" % repr_saml(str(authn_req)), context.state)
+        satosa_logging(logger, logging.DEBUG, "%s" % authn_req, context.state)
 
         try:
             resp_args = idp.response_args(authn_req)
@@ -364,8 +363,7 @@ class SAMLFrontend(FrontendModule, SAMLBaseModule):
         args.update(**resp_args)
 
         try:
-            args['sign_alg'] = getattr(xmldsig,
-                                       util.xmldsig_validate_w3c_format(sign_alg))
+            args['sign_alg'] = getattr(xmldsig, sign_alg)
         except AttributeError as e:
             errmsg = "Unsupported sign algorithm %s" % sign_alg
             satosa_logging(logger, logging.ERROR, errmsg, context.state)
@@ -375,8 +373,7 @@ class SAMLFrontend(FrontendModule, SAMLBaseModule):
             satosa_logging(logger, logging.DEBUG, dbgmsg, context.state)
 
         try:
-            args['digest_alg'] = getattr(xmldsig,
-                                         util.xmldsig_validate_w3c_format(digest_alg))
+            args['digest_alg'] = getattr(xmldsig, digest_alg)
         except AttributeError as e:
             errmsg = "Unsupported digest algorithm %s" % digest_alg
             satosa_logging(logger, logging.ERROR, errmsg, context.state)
