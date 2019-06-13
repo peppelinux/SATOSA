@@ -75,7 +75,8 @@ def cookie_to_state(cookie_str, name, encryption_key):
         msg_tmpl = 'No cookie named {name} in {data}'
         msg = msg_tmpl.format(name=name, data=cookie_str)
         logger.exception(msg)
-        raise SATOSAStateError(msg) from e
+        # see: https://github.com/IdentityPython/SATOSA/issues/236
+        #raise SATOSAStateError(msg) from e
     except ValueError as e:
         msg_tmpl = 'Failed to process {name} from {data}'
         msg = msg_tmpl.format(name=name, data=cookie_str)
