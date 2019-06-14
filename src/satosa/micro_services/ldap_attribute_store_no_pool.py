@@ -8,16 +8,15 @@ the record and assert them to the receiving SP.
 from satosa.micro_services.base import ResponseMicroService
 from satosa.logging_util import satosa_logging
 from satosa.response import Redirect
-from satosa.exception import SATOSAError
 
-import copy
 import logging
 import ldap3
 import urllib
 
 from ldap3.core.exceptions import LDAPException
 
-from . ldap_attribute_store import *
+from . ldap_attribute_store import (LdapAttributeStore,
+                                    LdapAttributeStoreError)
 
 logger = logging.getLogger(__name__)
 
