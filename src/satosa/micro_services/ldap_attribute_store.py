@@ -27,6 +27,7 @@ class LdapAttributeStoreError(SATOSAError):
     """
     pass
 
+
 class LdapAttributeStore(ResponseMicroService):
     """
     Use identifier provided by the backend authentication service
@@ -467,8 +468,8 @@ class LdapAttributeStore(ResponseMicroService):
         # this adapts records with different search and connection strategy (sync without pool), it should be tested with anonimous bind with message_id
         if isinstance(results, bool):
             r = dict()
-            r['dn'] = record.entry_dn
-            r['attributes'] = record.entry_attributes_as_dict
+            r['dn'] = record.entry_dn if hasattr(r, 'entry_dn') else ''
+            r['attributes'] = record.entry_attributes_as_dict if hasattr(r, 'entry_attributes_as_dict') else {}
             record = r
         # ends adaptation
 
