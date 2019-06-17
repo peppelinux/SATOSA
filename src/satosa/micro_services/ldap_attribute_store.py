@@ -400,7 +400,7 @@ class LdapAttributeStore(satosa.micro_services.base.ResponseMicroService):
         # Initialize an empty LDAP record. The first LDAP record found using the ordered
         # list of search filter values will be the record used.
         record = None
-        exp_msg = ''
+        err_msg = None
 
         try:
             connection = config['connection']
@@ -423,15 +423,16 @@ class LdapAttributeStore(satosa.micro_services.base.ResponseMicroService):
                         satosa_logging(logger, logging.WARN, "LDAP server returned {} records using search filter value {}".format(len(responses), filter_val), context.state)
                     record = responses[0]
                     break
-        except LDAPException as err:
-            exp_msg = "Caught LDAP exception: {}".format(err)
-        except LdapAttributeStoreError as err:
-            exp_msg = "Caught LDAP Attribute Store exception: {}".format(err)
-        except Exception as err:
-            exp_msg = "Caught unhandled exception: {}".format(err)
 
-        if exp_msg:
-            satosa_logging(logger, logging.ERROR, exp_msg, context.state)
+        except LDAPException as e:
+            err_msg = "Caught LDAP exception: {}".format(e)
+        except LdapAttributeStoreError as e:
+            err_msg = "Caught LDAP Attribute Store exception: {}".format(e)
+        except Exception as e:
+            err_msg = "Caught unhandled exception: {}".format(e)
+
+        if err_msg:
+            satosa_logging(logger, logging.ERROR, err_msg, context.state)
             return super().process(context, data)
 
         # Before using a found record, if any, to populate attributes
