@@ -467,10 +467,10 @@ class LdapAttributeStore(ResponseMicroService):
 
         # this adapts records with different search and connection strategy (sync without pool), it should be tested with anonimous bind with message_id
         if isinstance(results, bool):
-            r = dict()
-            r['dn'] = record.entry_dn if hasattr(r, 'entry_dn') else ''
-            r['attributes'] = record.entry_attributes_as_dict if hasattr(r, 'entry_attributes_as_dict') else {}
-            record = r
+            drec = dict()
+            drec['dn'] = record.entry_dn if hasattr(record, 'entry_dn') else ''
+            drec['attributes'] = record.entry_attributes_as_dict if hasattr(record, 'entry_attributes_as_dict') else {}
+            record = drec
         # ends adaptation
 
         # Use a found record, if any, to populate attributes and input for NameID
