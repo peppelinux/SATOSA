@@ -39,14 +39,15 @@ class UniAttributeProcessor:
                 return data['uniqueid']
 
     @staticmethod
-    def matricola(personalUniqueCodes=[], id_string='dipendente'):
+    def matricola(personalUniqueCodes=[], id_string='dipendente', orgname='unical.it'):
         if isinstance(personalUniqueCodes, str):
             personalUniqueCodes = [personalUniqueCodes]
         _regexp = (r'(?P<urn_prefix>urn:schac:personalUniqueCode:)?'
                    r'(?P<nation>[a-zA-Z]{2}):'
-                   r'(?P<organization>[a-zA-Z\.\-]+):'
+                   #r'(?P<organization>[a-zA-Z\.\-]+):'
+                   'ORGNAME:'
                    'IDSTRING:'
-                   r'(?P<uniqueid>[\w]+)').replace('IDSTRING', id_string)
+                   r'(?P<uniqueid>[\w]+)').replace('IDSTRING', id_string).replace('ORGNAME', orgname)
         for uniqueid in personalUniqueCodes:
             result = re.match(_regexp, uniqueid, re.I)
             if result:
