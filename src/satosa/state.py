@@ -70,7 +70,7 @@ def cookie_to_state(cookie_str, name, encryption_key):
     :return: A state
     """
     cookie = SimpleCookie(cookie_str)
-    if not cookie:
+    if not cookie or not cookie.get(name):
         return State('', encryption_key)
 
     try:
