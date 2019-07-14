@@ -58,15 +58,20 @@ class DecideBackendByTarget(RequestMicroService):
             raise SATOSABackendNotFoundError("'{}' not found in "
                                              "proxy_conf.yaml".format(tr_backend))
 
+        if not backends.get(tr_backend):
+            raise SATOSABackendNotFoundError("'{}' not found in "
+                                             "proxy_conf.yaml".format(tr_backend))
+
         tr_path = context.path.replace(native_backend, tr_backend)
         for endpoint in backends[tr_backend]['endpoints']:
             # remove regex trailing chars
             if tr_path == endpoint[0].strip('^').strip('$'):
-                msg = ('Found DecideBackendByTarget ({} microservice ) '
-                       'redirecting {} backend to {}').format(self.name,
-                                                              native_backend,
-                                                              tr_backend)
-                satosa_logging(logger, logging.DEBUG, msg, context.state)
+                msg = ('Found DecideBackendByTarget ({} microservice) '
+                       'redirecting {} from {} backend to {}').format(self.name,
+                                                                      entity_id,
+                                                                      native_backend,
+                                                                      tr_backend)
+                satosa_logging(logger, logging.INFO, msg, context.state)
                 return (tr_backend, tr_path)
         return
 
