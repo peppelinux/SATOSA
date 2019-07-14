@@ -70,7 +70,7 @@ class DecideBackendByTarget(RequestMicroService):
                        'redirecting {} backend to {}').format(self.name,
                                                               native_backend,
                                                               tr_backend)
-                satosa_logging(logger, logging.DEBUG, msg, context.state)
+                satosa_logging(logger, logging.INFO, msg, context.state)
                 return (tr_backend, tr_path)
         return
 
