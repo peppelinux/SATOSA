@@ -18,7 +18,8 @@ class UniAttributeProcessor:
                 #if data.get('nation') == 'IT' and data.get('doc_type') in  ['CF', 'TIN']:
                 if nationprefix:
                     # returns IT:CODICEFISCALE
-                    return nationprefix_sep.join((data['nation'], data['uniqueid']))
+                    return nationprefix_sep.join((data['nation'],
+                                                  data['uniqueid']))
                 # returns CODICEFISCALE
                 return data['uniqueid']
 
@@ -34,7 +35,8 @@ class UniAttributeProcessor:
                 data = result.groupdict()
                 if nationprefix:
                     # returns IT:CODICEFISCALE
-                    return nationprefix_sep.join((data['nation'], data['uniqueid']))
+                    return nationprefix_sep.join((data['nation'],
+                                                  data['uniqueid']))
                 # returns CODICEFISCALE
                 return data['uniqueid']
 
@@ -58,11 +60,13 @@ class UnicalLegacyAttributeGenerator(BaseProcessor):
 
     def matricola_dipendente(self, attributes):
         if attributes.get('schacpersonaluniquecode'):
-            return UniAttributeProcessor.matricola(attributes['schacpersonaluniquecode'], id_string='dipendente')
+            return UniAttributeProcessor.matricola(attributes['schacpersonaluniquecode'],
+                                                   id_string='dipendente')
 
     def matricola_studente(self, attributes):
         if attributes.get('schacpersonaluniquecode'):
-            return UniAttributeProcessor.matricola(attributes['schacpersonaluniquecode'], id_string='studente')
+            return UniAttributeProcessor.matricola(attributes['schacpersonaluniquecode'],
+                                                   id_string='studente')
 
     def codice_fiscale(self, attributes):
         if attributes.get('schacpersonaluniqueid'):
