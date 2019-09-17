@@ -282,8 +282,10 @@ class SAMLFrontend(FrontendModule, SAMLBaseModule):
         if idp_policy:
             approved_attributes = self._get_approved_attributes(idp, idp_policy, internal_response.requester,
                                                                 context.state)
-            attributes = {k: v for k, v in internal_response.attributes.items() if k in approved_attributes}
-
+            if approved_attributes:
+                approved_attributes = [i.lower() for i in approved_attributes]
+                internal_attributes = {k.lower():v for k,v in internal_response.attributes.items()}
+            attributes = {k: v for k, v in internal_attributes.items() if k in approved_attributes}
         return attributes
 
     def _handle_authn_response(self, context, internal_response, idp):
