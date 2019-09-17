@@ -28,7 +28,8 @@ class MultiLdapAttributeStore(ResponseMicroService):
         self.config = config
 
         # cache
-        self.attributes = {}
+        # use mongodb, using sp+user id as key
+        #self.attributes = {}
 
         # import settings and loads connections
         spec = importlib_util.spec_from_file_location("settings",
@@ -49,80 +50,50 @@ class MultiLdapAttributeStore(ResponseMicroService):
 
 
     def process(self, context, data):
-        """
-        Default interface for microservices. Process the input data for
-        the input context.
 
-        a typical data:
-        {'auth_info':
-            {'auth_class_ref': 'urn:oasis:names:tc:SAML:2.0:ac:classes:Password',
-             'timestamp': '2019-07-31T08:23:04Z',
-             'issuer': 'https://idp1.testunical.it/idp/metadata'},
-         'requester': 'https://sp1.testunical.it/saml2/metadata/',
-         'requester_name': [{'text': None, 'lang': 'en'}],
-         'attributes': {'edupersontargetedid': ['971455391c5b7f87ccb1517c54da63ebb705338105900702b0dc27174f395d58'],
-                        'edupersonprincipalname': ['mario@testunical.it'],
-                        'edupersonscopedaffiliation': ['staff@testunical.it', 'member@testunical.it', 'member@altrodominio.it'],
-                        ...
-                        }}
-
-
-        a typical context:
-        {'_path': 'Saml2/acs/post',
- 'cookie': 'SAML2_PROXY_STATE="_Td6WFoAAATm1rRGAgAhARYAAAB0L..."',
- 'internal_data': {'metadata_store': <saml2.mdstore.MetadataStore object at 0x7f79bf5a1208>},
- 'request': None,
- 'request_authorization': '',
- 'state': {'CONSENT': {'filter': ['registeredOffice',
-                                  'mobilePhone',
-                                  'digitalAddress',
-                                   ...]
-                       'requester_name': [{'lang': 'en',
-                                           'text': 'https://sp1.testunical.it/saml2/metadata/'}]},
-           'ROUTER': 'Saml2IDP',
-           'SATOSA_BASE': {'requester': 'https://sp1.testunical.it/saml2/metadata/'},
-           'SESSION_ID': 'urn:uuid:11878ccc-49d3-48df-92a5-7c8c5963d4d1',
-           'Saml2IDP': {'relay_state': '/',
-                        'resp_args': {'binding': 'urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST',
-                                      'destination': 'https://sp1.testunical.it/saml2/acs/',
-                                      'in_response_to': 'id-KMWPTSgjiBrMbx4zO',
-                                      'name_id_policy': '<ns0:NameIDPolicy '
-                                                        'xmlns:ns0="urn:oasis:names:tc:SAML:2.0:protocol" '
-                                                        'AllowCreate="false" '
-                                                        'Format="urn:oasis:names:tc:SAML:2.0:nameid-format:persistent" '
-                                                        '/>',
-                                      'sp_entity_id': 'https://sp1.testunical.it/saml2/metadata/'}}},
- 'target_backend': 'Saml2',
- 'target_frontend': None,
- 'target_micro_service': None}
-
-
-        """
-        if self.attributes:
-            msg = "MultiLdapAttributeStore found previously fetched attributes"
-            satosa_logging(logger, logging.INFO, msg, None)
-            return ResponseMicroService.process(self, context, data)
+        # Use cache in mongoDB with cache duration of 5min
+        #if self.attributes and self.config.get('attributes_cache', None):
+            #satosa_logging(logger, logging.DEBUG, 'Attr processor id: {}'.format(id(self)), None)
+            #msg = "MultiLdapAttributeStore found previously fetched attributes"
+            #satosa_logging(logger, logging.INFO, msg, None)
+            #return ResponseMicroService.process(self, context, data)
 
         for name,lc in self.connections.items():
             search_attr = self.config['unique_attribute_to_match']
-            ldapfilter = '({}={})'.format(search_attr, data.attributes[search_attr][0])
+
+            # prevent exception on missin attr
+            attr_value = data.attributes.get(search_attr, False)
+            if not attr_value:
+                msg = '{} not found in {}'.format(search_attr, lc)
+                satosa_logging(logger, logging.DEBUG, msg, None)
+                continue
+            if isinstance(attr_value, str):
+                attr_value = [attr_value]
+
             msg = ("MultiLdapAttributeStore searches for {} in {}".format(search_attr, lc))
-            satosa_logging(logger, logging.DEBUG, msg, None)
+            satosa_logging(logger, logging.INFO, msg, None)
+
+            ldapfilter = '({}{}{})'.format(search_attr,
+                                           self.config['ldap_filter_operator'],
+                                           attr_value[0])
             identity = lc.get(search=ldapfilter, format='dict')
             if not identity: continue
 
             msg = "MultiLdapAttributeStore matches on {}".format(search_attr)
             satosa_logging(logger, logging.INFO, msg, None)
 
+            attributes = {}
             for k,v in identity.items():
-                if k not in self.attributes:
-                    self.attributes[k] = v
-                    msg = "MultiLdapAttributeStore created {}".format(k)
+                k = k.lower()
+                if k not in attributes:
+                    attributes[k] = v
+                    msg = "MultiLdapAttributeStore created: {}".format([e for e in v.keys()])
                     satosa_logging(logger, logging.DEBUG, msg, None)
-                elif k in self.attributes and not v in self.attributes[k]:
-                    self.attributes[k].append(v)
-                    msg = "MultiLdapAttributeStore added {}".format(k)
-                    satosa_logging(logger, logging.DEBUG, msg, None)
+                # TODO: check this update
+                elif k in attributes:
+                    attributes[k].update(v)
 
-        data.attributes = copy.copy(self.attributes)
+                data.attributes.update(copy.copy(attributes[k]))
+                satosa_logging(logger, logging.DEBUG, ''.format(data.attributes), None)
+
         return ResponseMicroService.process(self, context, data)

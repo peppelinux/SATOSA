@@ -59,20 +59,37 @@ class UniAttributeProcessor:
 class UnicalLegacyAttributeGenerator(BaseProcessor):
 
     def matricola_dipendente(self, attributes):
+        v = None
         if attributes.get('schacpersonaluniquecode'):
-            return UniAttributeProcessor.matricola(attributes['schacpersonaluniquecode'],
+            v = 'schacpersonaluniquecode'
+        elif attributes.get('schacPersonalUniqueCode'):
+            v = 'schacPersonalUniqueCode'
+        if v:
+            return UniAttributeProcessor.matricola(attributes[v],
                                                    id_string='dipendente')
 
     def matricola_studente(self, attributes):
+        v = None
         if attributes.get('schacpersonaluniquecode'):
-            return UniAttributeProcessor.matricola(attributes['schacpersonaluniquecode'],
+            v = 'schacpersonaluniquecode'
+        elif attributes.get('schacPersonalUniqueCode'):
+            v = 'schacPersonalUniqueCode'
+        if v:
+            return UniAttributeProcessor.matricola(attributes[v],
                                                    id_string='studente')
 
     def codice_fiscale(self, attributes):
+        v = None
         if attributes.get('schacpersonaluniqueid'):
             return UniAttributeProcessor.codice_fiscale_rs(attributes['schacpersonaluniqueid'])
+        elif attributes.get('schacPersonalUniqueID'):
+            return UniAttributeProcessor.codice_fiscale_rs(attributes['schacPersonalUniqueID'])
         elif attributes.get('fiscalNumber'):
-            fiscalNumber = UniAttributeProcessor.codice_fiscale_spid(attributes['fiscalNumber'])
+            v = 'fiscalNumber'
+        elif attributes.get('fiscalnumber'):
+            v = 'fiscalnumber'
+        if v:
+            fiscalNumber = UniAttributeProcessor.codice_fiscale_spid(attributes[v])
             # put a fake 'schacpersonaluniqueid' to do ldap account linking with the next microservice
             attributes['schacpersonaluniqueid'] = 'urn:schac:personalUniqueID:IT:CF:{}'.format(fiscalNumber)
             return fiscalNumber

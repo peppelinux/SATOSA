@@ -283,8 +283,10 @@ class SAMLFrontend(FrontendModule, SAMLBaseModule):
         if idp_policy:
             approved_attributes = self._get_approved_attributes(idp, idp_policy, internal_response.requester,
                                                                 context.state)
-            attributes = {k: v for k, v in internal_response.attributes.items() if k in approved_attributes}
-
+            if approved_attributes:
+                approved_attributes = [i.lower() for i in approved_attributes]
+                internal_attributes = {k.lower():v for k,v in internal_response.attributes.items()}
+            attributes = {k: v for k, v in internal_attributes.items() if k in approved_attributes}
         return attributes
 
     def _handle_authn_response(self, context, internal_response, idp):
@@ -301,7 +303,6 @@ class SAMLFrontend(FrontendModule, SAMLBaseModule):
         :return: A saml response
         """
         request_state = self.load_state(context.state)
-
         resp_args = request_state["resp_args"]
         sp_entity_id = resp_args["sp_entity_id"]
         internal_response.attributes = self._filter_attributes(
