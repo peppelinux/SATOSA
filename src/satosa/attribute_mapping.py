@@ -179,7 +179,8 @@ class AttributeMapper(object):
         external_dict = {}
         for internal_attribute_name in internal_dict:
             try:
-                attribute_mapping = self.from_internal_attributes[internal_attribute_name]
+                attribute_mapping = self.from_internal_attributes.get(internal_attribute_name)
+                if not attribute_mapping: continue
             except KeyError:
                 logger.debug("no attribute mapping found for the internal attribute '%s'", internal_attribute_name)
                 continue
