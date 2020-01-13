@@ -456,6 +456,8 @@ class FakeFrontend(FrontendModule):
 
 
 class TestBackend(BackendModule):
+    __test__ = False
+
     def __init__(self, auth_callback_func, internal_attributes, config, base_url, name):
         super().__init__(auth_callback_func, internal_attributes, base_url, name)
 
@@ -469,11 +471,13 @@ class TestBackend(BackendModule):
         auth_info = AuthenticationInformation("test", str(datetime.now()), "test_issuer")
         internal_resp = InternalData(auth_info=auth_info)
         internal_resp.attributes = context.request
-        internal_resp.user_id = "test_user"
+        internal_resp.subject_id = "test_user"
         return self.auth_callback_func(context, internal_resp)
 
 
 class TestFrontend(FrontendModule):
+    __test__ = False
+
     def __init__(self, auth_req_callback_func, internal_attributes, config, base_url, name):
         super().__init__(auth_req_callback_func, internal_attributes, base_url, name)
 
@@ -492,6 +496,8 @@ class TestFrontend(FrontendModule):
 
 
 class TestRequestMicroservice(RequestMicroService):
+    __test__ = False
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -503,6 +509,8 @@ class TestRequestMicroservice(RequestMicroService):
 
 
 class TestResponseMicroservice(ResponseMicroService):
+    __test__ = False
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 

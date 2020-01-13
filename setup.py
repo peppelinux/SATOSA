@@ -6,7 +6,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='SATOSA',
-    version='4.1.0',
+    version='6.0.0',
     description='Protocol proxy (SAML/OIDC).',
     author='DIRG',
     author_email='satosa-dev@lists.sunet.se',
@@ -31,7 +31,6 @@ setup(
     zip_safe=False,
     classifiers=[
         "Programming Language :: Python :: 3 :: Only",
-        "Programming Language :: Python :: 3.5",
         "Programming Language :: Python :: 3.6",
         "Programming Language :: Python :: 3.7",
     ],

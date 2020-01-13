@@ -1,5 +1,73 @@
 # Changelog
 
+## 6.0.0 (2019-12-17)
+
+- properly support mutliple values when converting internal attributes to OIDC
+  claims. For all claims other than the ones define in OIDC core specification,
+  the same values as the ones that have been set in the internal representation
+  will be returned.
+- improve log handling
+- micro-services: Better handling of single-value attribute by LdapAttributeStore
+
+
+## 5.0.0 (2019-11-07)
+
+*Notice*: Support for python 3.5 has been dropped.
+
+- Add a dict-like interface to the internal objects
+- Fix escaped chars in RegEx strings
+- tests: fix warnings
+- build: drop support for python 3.5
+- misc: typos and formatting
+
+
+## 4.5.0 (2019-11-05)
+
+- add options in saml-frontend to encrypt assertion from AuthnResponse
+- use saml2.extension.mdui in place of saml2.extension.ui
+- improve log handling
+- remove logging around state-cookie loading
+- print the absolute path of the configuration when failing to read it
+- error out if no backend or frontend is configured
+- frontends: oidc: support extra_scopes
+- frontends: SAMLVirtualCoFrontend: add attribute scope
+- backends: orcid: add state parameter to authorization request
+- backends: orcid: fix read address attribute
+- backends: orcid: fix authorization token header
+- backends: bitbucket: new oauth2 backend
+- backends: facebook: add more configuration options
+- micro-services: improve the ldap_attribute_store
+- build: refactor the start.sh docker script
+- build: improve travis stages for new releases
+- docs: add sequence diagrams for SAML-to-SAML flow
+- docs: improve configuration docs
+- docs: improve micro-service docs
+- misc: correct typos
+
+
+## 4.4.0 (2019-07-09)
+
+Trigger new version build to automatically upload to PyPI,
+docker hub and GitHub.
+
+- Fix travis CI/CD configuration
+
+
+## 4.3.0 (2019-07-09)
+
+Trigger new version build to automatically upload to PyPI and docker hub.
+
+- Fix travis CI/CD configuration
+
+
+## 4.2.0 (2019-07-09)
+
+Trigger new version build to automatically upload to PyPI and docker hub.
+
+- Fix travis CI/CD configuration
+- Fix typo in release instructions
+
+
 ## 4.1.0 (2019-07-09)
 
 Trigger new version build to automatically upload to PyPI and docker hub.

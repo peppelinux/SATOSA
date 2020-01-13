@@ -3,6 +3,7 @@ A OpenID Connect frontend module for the satosa proxy
 """
 import json
 import logging
+from collections import defaultdict
 from urllib.parse import urlencode, urlparse
 
 from jwkest.jwk import rsa_load, RSAKey
@@ -21,12 +22,12 @@ from pyop.userinfo import Userinfo
 from pyop.util import should_fragment_encode
 
 from .base import FrontendModule
-from ..logging_util import satosa_logging
 from ..response import BadRequest, Created
 from ..response import SeeOther, Response
 from ..response import Unauthorized
 from ..util import rndstr
 
+import satosa.logging_util as lu
 from satosa.internal import InternalData
 from satosa.deprecated import oidc_subject_type_to_hash_type
 
@@ -127,8 +128,8 @@ class OpenIDConnectFrontend(FrontendModule):
 
         auth_req = self._get_authn_request_from_state(context.state)
 
-        attributes = self.converter.from_internal("openid", internal_resp.attributes)
-        self.user_db[internal_resp.subject_id] = {k: v[0] for k, v in attributes.items()}
+        claims = self.converter.from_internal("openid", internal_resp.attributes)
+        self.user_db[internal_resp.subject_id] = dict(combine_claim_values(claims.items()))
         auth_resp = self.provider.authorize(
             auth_req,
             internal_resp.subject_id,
@@ -154,7 +155,9 @@ class OpenIDConnectFrontend(FrontendModule):
         else:
             error_resp = AuthorizationErrorResponse(error="access_denied",
                                                     error_description=exception.message)
-        satosa_logging(logger, logging.DEBUG, exception.message, exception.state)
+        msg = exception.message
+        logline = lu.LOG_FMT.format(id=lu.get_session_id(exception.state), message=msg)
+        logger.debug(logline)
         return SeeOther(error_resp.request(auth_req["redirect_uri"], should_fragment_encode(auth_req)))
 
     def register_endpoints(self, backend_names):
@@ -171,8 +174,12 @@ class OpenIDConnectFrontend(FrontendModule):
             # similar to SAML entity discovery
             # this can be circumvented with a custom RequestMicroService which handles the routing based on something
             # in the authentication request
-            logger.warn("More than one backend is configured, make sure to provide a custom routing micro service to "
-                        "determine which backend should be used per request.")
+            logline = (
+                "More than one backend is configured, "
+                "make sure to provide a custom routing micro service "
+                "to determine which backend should be used per request."
+            )
+            logger.warning(logline)
         else:
             backend_name = backend_names[0]
 
@@ -259,7 +266,11 @@ class OpenIDConnectFrontend(FrontendModule):
         return Response(self.provider.provider_configuration.to_json(), content="application/json")
 
     def _get_approved_attributes(self, provider_supported_claims, authn_req):
-        requested_claims = list(scope2claims(authn_req["scope"]).keys())
+        requested_claims = list(
+            scope2claims(
+                authn_req["scope"], self.config["provider"].get("extra_scopes")
+            ).keys()
+        )
         if "claims" in authn_req:
             for k in ["id_token", "userinfo"]:
                 if k in authn_req["claims"]:
@@ -276,14 +287,16 @@ class OpenIDConnectFrontend(FrontendModule):
         :return: the internal request
         """
         request = urlencode(context.request)
-        satosa_logging(logger, logging.DEBUG, "Authn req from client: {}".format(request),
-                       context.state)
+        msg = "Authn req from client: {}".format(request)
+        logline = lu.LOG_FMT.format(id=lu.get_session_id(context.state), message=msg)
+        logger.debug(logline)
 
         try:
             authn_req = self.provider.parse_authentication_request(request)
         except InvalidAuthenticationRequest as e:
-            satosa_logging(logger, logging.ERROR, "Error in authn req: {}".format(str(e)),
-                           context.state)
+            msg = "Error in authn req: {}".format(str(e))
+            logline = lu.LOG_FMT.format(id=lu.get_session_id(context.state), message=msg)
+            logger.error(logline)
             error_url = e.to_error_url()
 
             if error_url:
@@ -350,13 +363,15 @@ class OpenIDConnectFrontend(FrontendModule):
             response = self.provider.handle_token_request(urlencode(context.request), headers)
             return Response(response.to_json(), content="application/json")
         except InvalidClientAuthentication as e:
-            logger.debug('invalid client authentication at token endpoint', exc_info=True)
+            logline = "invalid client authentication at token endpoint"
+            logger.debug(logline, exc_info=True)
             error_resp = TokenErrorResponse(error='invalid_client', error_description=str(e))
             response = Unauthorized(error_resp.to_json(), headers=[("WWW-Authenticate", "Basic")],
                                     content="application/json")
             return response
         except OAuthError as e:
-            logger.debug('invalid request: %s', str(e), exc_info=True)
+            logline = "invalid request: {}".format(str(e))
+            logger.debug(logline, exc_info=True)
             error_resp = TokenErrorResponse(error=e.oauth_error, error_description=str(e))
             return BadRequest(error_resp.to_json(), content="application/json")
 
@@ -374,3 +389,50 @@ class OpenIDConnectFrontend(FrontendModule):
             response = Unauthorized(error_resp.to_json(), headers=[("WWW-Authenticate", AccessToken.BEARER_TOKEN_TYPE)],
                                     content="application/json")
             return response
+
+
+def combine_return_input(values):
+    return values
+
+
+def combine_select_first_value(values):
+    return values[0]
+
+
+def combine_join_by_space(values):
+    return " ".join(values)
+
+
+combine_values_by_claim = defaultdict(
+    lambda: combine_return_input,
+    {
+        "sub": combine_select_first_value,
+        "name": combine_select_first_value,
+        "given_name": combine_join_by_space,
+        "family_name": combine_join_by_space,
+        "middle_name": combine_join_by_space,
+        "nickname": combine_select_first_value,
+        "preferred_username": combine_select_first_value,
+        "profile": combine_select_first_value,
+        "picture": combine_select_first_value,
+        "website": combine_select_first_value,
+        "email": combine_select_first_value,
+        "email_verified": combine_select_first_value,
+        "gender": combine_select_first_value,
+        "birthdate": combine_select_first_value,
+        "zoneinfo": combine_select_first_value,
+        "locale": combine_select_first_value,
+        "phone_number": combine_select_first_value,
+        "phone_number_verified": combine_select_first_value,
+        "address": combine_select_first_value,
+        "updated_at": combine_select_first_value,
+    },
+)
+
+
+def combine_claim_values(claim_items):
+    claims = (
+        (name, combine_values_by_claim[name](values))
+        for name, values in claim_items
+    )
+    return claims

@@ -6,14 +6,15 @@ import logging
 from base64 import urlsafe_b64encode
 
 import requests
+
 from oic.oauth2.consumer import Consumer, stateID
 from oic.oauth2.message import AuthorizationResponse
 from oic.utils.authn.authn_context import UNSPECIFIED
 
+import satosa.logging_util as lu
 from satosa.internal import AuthenticationInformation
 from satosa.internal import InternalData
 from satosa.exception import SATOSAAuthenticationError
-from satosa.logging_util import satosa_logging
 from satosa.response import Redirect
 from satosa.util import rndstr
 from satosa.metadata_creation.description import (
@@ -74,14 +75,18 @@ class _OAuthBackend(BackendModule):
         :type internal_request: satosa.internal.InternalData
         :rtype satosa.response.Redirect
         """
-        oauth_state = get_state(self.config["base_url"], rndstr().encode())
-
-        state_data = dict(state=oauth_state)
-        context.state[self.name] = state_data
-
-        request_args = {"redirect_uri": self.redirect_url, "state": oauth_state}
+        request_args = self.get_request_args(get_state=get_state)
+        context.state[self.name] = {"state": request_args["state"]}
         cis = self.consumer.construct_AuthorizationRequest(request_args=request_args)
         return Redirect(cis.request(self.consumer.authorization_endpoint))
+
+    def get_request_args(self, get_state=stateID):
+        oauth_state = get_state(self.config["base_url"], rndstr().encode())
+        request_args = {
+            "redirect_uri": self.redirect_url,
+            "state": oauth_state,
+        }
+        return request_args
 
     def register_endpoints(self):
         """
@@ -108,8 +113,9 @@ class _OAuthBackend(BackendModule):
         is_known_state = "state" in resp and "state" in state_data and resp["state"] == state_data["state"]
         if not is_known_state:
             received_state = resp.get("state", "")
-            satosa_logging(logger, logging.DEBUG,
-                           "Missing or invalid state [%s] in response!" % received_state, state)
+            msg = "Missing or invalid state [{}] in response!".format(received_state)
+            logline = lu.LOG_FMT.format(id=lu.get_session_id(state), message=msg)
+            logger.debug(logline)
             raise SATOSAAuthenticationError(state,
                                             "Missing or invalid state [%s] in response!" %
                                             received_state)
@@ -178,6 +184,12 @@ class FacebookBackend(_OAuthBackend):
     Backend module for facebook.
     """
 
+    """
+    The default graph endpoint is for backward compatibility with previous versions of the
+    Facebook backend in which the graph endpoint was hardcoded in the code.
+    """
+    DEFAULT_GRAPH_ENDPOINT = "https://graph.facebook.com/v2.5/me"
+
     def __init__(self, outgoing, internal_attributes, config, base_url, name):
         """
         Constructor.
@@ -200,6 +212,20 @@ class FacebookBackend(_OAuthBackend):
         config.setdefault("response_type", "code")
         config["verify_accesstoken_state"] = False
         super().__init__(outgoing, internal_attributes, config, base_url, name, "facebook", "id")
+
+    def get_request_args(self, get_state=stateID):
+        request_args = super().get_request_args(get_state=get_state)
+
+        client_id = self.config["client_config"]["client_id"]
+        extra_args = {
+            arg_name: arg_val
+            for arg_name in ["auth_type", "scope"]
+            for arg_val in [self.config.get(arg_name, [])]
+            if arg_val
+        }
+        extra_args.update({"client_id": client_id})
+        request_args.update(extra_args)
+        return request_args
 
     def auth_info(self, request):
         """
@@ -224,8 +250,8 @@ class FacebookBackend(_OAuthBackend):
         :param access_token: The access token to be used to retrieve the data.
         :return: Dictionary with attribute name as key and attribute value as value.
         """
-        payload = {'access_token': access_token}
-        url = "https://graph.facebook.com/v2.5/me"
+        payload = {"access_token": access_token}
+        url = self.config["server_info"].get("graph_endpoint", self.DEFAULT_GRAPH_ENDPOINT)
         if self.config["fields"]:
             payload["fields"] = ",".join(self.config["fields"])
         resp = requests.get(url, params=payload)
@@ -258,14 +284,14 @@ def get_metadata_desc_for_oauth_backend(entity_id, config):
         # Add contact person information
         for contact_person in entity_info.get("contact_person", []):
             person = ContactPersonDesc()
-            if 'contact_type' in contact_person:
-                person.contact_type = contact_person['contact_type']
-            for address in contact_person.get('email_address', []):
+            if "contact_type" in contact_person:
+                person.contact_type = contact_person["contact_type"]
+            for address in contact_person.get("email_address", []):
                 person.add_email_address(address)
-            if 'given_name' in contact_person:
-                person.given_name = contact_person['given_name']
-            if 'sur_name' in contact_person:
-                person.sur_name = contact_person['sur_name']
+            if "given_name" in contact_person:
+                person.given_name = contact_person["given_name"]
+            if "sur_name" in contact_person:
+                person.sur_name = contact_person["sur_name"]
 
             description.add_contact_person(person)
 

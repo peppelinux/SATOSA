@@ -10,9 +10,6 @@ import saml2.xmldsig
 import xml.dom.minidom
 import zlib
 
-from satosa.logging_util import satosa_logging
-from xml.parsers.expat import ExpatError
-
 
 logger = logging.getLogger(__name__)
 
@@ -98,11 +95,11 @@ def check_set_dict_defaults(dic, spec):
             else:
                 is_value_valid = _val == value
             if not is_value_valid:
-                satosa_logging(
-                    logger, logging.WARNING,
-                    "Incompatible configuration value '{}' for '{}'."
-                    " Value shoud be: {}".format(_val, path, value),
-                    {})
+                logline = (
+                    "Incompatible configuration value '{value}' for '{path}'. "
+                    "Value shoud be: {expected}"
+                ).format(value=_val, path=path, expected=value)
+                logger.warning(logline)
     return dic
 
 

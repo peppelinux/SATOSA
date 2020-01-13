@@ -15,7 +15,8 @@ from Cryptodome import Random
 from Cryptodome.Cipher import AES
 
 from .exception import SATOSAStateError
-from .logging_util import satosa_logging
+
+import satosa.logging_util as lu
 
 logger = logging.getLogger(__name__)
 
@@ -44,9 +45,11 @@ def state_to_cookie(state, name, path, encryption_key):
     cookie_data = "" if state.delete else state.urlstate(encryption_key)
     max_age = 0 if state.delete else STATE_COOKIE_MAX_AGE
 
-    satosa_logging(logger, logging.DEBUG,
-                   "Saving state as cookie, secure: %s, max-age: %s, path: %s" %
-                   (STATE_COOKIE_SECURE, STATE_COOKIE_MAX_AGE, path), state)
+    msg = "Saving state as cookie, secure: {secure}, max-age: {max_age}, path: {path}".format(
+        secure=STATE_COOKIE_SECURE, max_age=STATE_COOKIE_MAX_AGE, path=path
+    )
+    logline = lu.LOG_FMT.format(id=lu.get_session_id(state), message=msg)
+    logger.debug(logline)
     cookie = SimpleCookie()
     cookie[name] = cookie_data
     cookie[name]["secure"] = STATE_COOKIE_SECURE
@@ -78,17 +81,12 @@ def cookie_to_state(cookie_str, name, encryption_key):
     except KeyError as e:
         msg_tmpl = 'No cookie named {name} in {data}'
         msg = msg_tmpl.format(name=name, data=cookie_str)
-        logger.exception(msg)
         raise SATOSAStateError(msg) from e
     except ValueError as e:
         msg_tmpl = 'Failed to process {name} from {data}'
         msg = msg_tmpl.format(name=name, data=cookie_str)
-        logger.exception(msg)
         raise SATOSAStateError(msg) from e
     else:
-        msg_tmpl = 'Loading state from cookie {data}'
-        msg = msg_tmpl.format(data=cookie_str)
-        satosa_logging(logger, logging.DEBUG, msg, state)
         return state
 
 

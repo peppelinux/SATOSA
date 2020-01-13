@@ -4,9 +4,10 @@ Holds satosa routing logic
 import logging
 import re
 
-from .context import SATOSABadContextError
-from .exception import SATOSAError, SATOSAStateError
-from .logging_util import satosa_logging
+from satosa.context import SATOSABadContextError
+from satosa.exception import SATOSAError
+
+import satosa.logging_util as lu
 
 logger = logging.getLogger(__name__)
 
@@ -50,7 +51,7 @@ class ModuleRouter(object):
         module
         """
 
-        if not frontends and not backends:
+        if not frontends or not backends:
             raise ValueError("Need at least one frontend and one backend")
 
         backend_names = [backend.name for backend in backends]
@@ -66,9 +67,9 @@ class ModuleRouter(object):
         else:
             self.micro_services = {}
 
-        logger.debug("Loaded backends with endpoints: %s" % backends)
-        logger.debug("Loaded frontends with endpoints: %s" % frontends)
-        logger.debug("Loaded micro services with endpoints: %s" % micro_services)
+        logger.debug("Loaded backends with endpoints: {}".format(backends))
+        logger.debug("Loaded frontends with endpoints: {}".format(frontends))
+        logger.debug("Loaded micro services with endpoints: {}".format(micro_services))
 
     def backend_routing(self, context):
         """
@@ -80,7 +81,9 @@ class ModuleRouter(object):
         :param context: The request context
         :return: backend
         """
-        satosa_logging(logger, logging.DEBUG, "Routing to backend: %s " % context.target_backend, context.state)
+        msg = "Routing to backend: {backend}".format(backend=context.target_backend)
+        logline = lu.LOG_FMT.format(id=lu.get_session_id(context.state), message=msg)
+        logger.debug(logline)
         backend = self.backends[context.target_backend]["instance"]
         context.state[STATE_KEY] = context.target_frontend
         return backend
@@ -104,8 +107,9 @@ class ModuleRouter(object):
                    'by proxy\'s frontend this error will always throw up')
             raise SATOSAStateError(msg.format('context.state[{}]["requester"]'.format(STATE_KEY)))
         target_frontend = context.state[STATE_KEY]
-
-        satosa_logging(logger, logging.DEBUG, "Routing to frontend: %s " % target_frontend, context.state)
+        msg = "Routing to frontend: {frontend}".format(frontend=target_frontend)
+        logline = lu.LOG_FMT.format(id=lu.get_session_id(context.state), message=msg)
+        logger.debug(logline)
         context.target_frontend = target_frontend
         frontend = self.frontends[context.target_frontend]["instance"]
         return frontend
@@ -115,9 +119,12 @@ class ModuleRouter(object):
             match = re.search(regex, context.path)
             if match is not None:
                 msg = "Found registered endpoint: module name:'{name}', endpoint: {endpoint}".format(
-                    name=module["instance"].name,
-                    endpoint=context.path)
-                satosa_logging(logger, logging.DEBUG, msg, context.state)
+                    name=module["instance"].name, endpoint=context.path
+                )
+                logline = lu.LOG_FMT.format(
+                    id=lu.get_session_id(context.state), message=msg
+                )
+                logger.debug(logline)
                 return spec
 
         return None
@@ -144,10 +151,16 @@ class ModuleRouter(object):
         :return: registered endpoint and bound parameters
         """
         if context.path is None:
-            satosa_logging(logger, logging.DEBUG, "Context did not contain a path!", context.state)
+            msg = "Context did not contain a path!"
+            logline = lu.LOG_FMT.format(
+                id=lu.get_session_id(context.state), message=msg
+            )
+            logger.debug(logline)
             raise SATOSABadContextError("Context did not contain any path")
 
-        satosa_logging(logger, logging.DEBUG, "Routing path: %s" % context.path, context.state)
+        msg = "Routing path: {path}".format(path=context.path)
+        logline = lu.LOG_FMT.format(id=lu.get_session_id(context.state), message=msg)
+        logger.debug(logline)
         path_split = context.path.split("/")
         backend = path_split[0]
 
@@ -168,11 +181,15 @@ class ModuleRouter(object):
         if backend in self.backends:
             context.target_backend = backend
         else:
-            satosa_logging(logger, logging.DEBUG, "Unknown backend %s" % backend, context.state)
+            msg = "Unknown backend {}".format(backend)
+            logline = lu.LOG_FMT.format(
+                id=lu.get_session_id(context.state), message=msg
+            )
+            logger.debug(logline)
 
         try:
             name, frontend_endpoint = self._find_registered_endpoint(context, self.frontends)
-        except ModuleRouter.UnknownEndpoint as e:
+        except ModuleRouter.UnknownEndpoint:
             pass
             # satosa_logging(logger, logging.DEBUG, "%s is a unknown endpoint" % backend, context.state)
         else:
@@ -181,7 +198,7 @@ class ModuleRouter(object):
 
         try:
             name, micro_service_endpoint = self._find_registered_endpoint(context, self.micro_services)
-        except ModuleRouter.UnknownEndpoint as e:
+        except ModuleRouter.UnknownEndpoint:
             pass
         else:
             context.target_micro_service = name
