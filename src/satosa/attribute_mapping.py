@@ -185,14 +185,10 @@ class AttributeMapper(object):
         """
         external_dict = {}
         for internal_attribute_name in internal_dict:
-            try:
-                attribute_mapping = self.from_internal_attributes.get(internal_attribute_name)
-                if not attribute_mapping: continue
-            except KeyError:
-                logline = "no attribute mapping found for the internal attribute {}".format(
-                    internal_attribute_name
-                )
-                logger.debug(logline)
+            attribute_mapping = self.from_internal_attributes.get(internal_attribute_name)
+            if not attribute_mapping:
+                _msg_tmpl = "no attribute mapping found for the internal attribute {}"
+                logger.debug(_msg_tmpl.format(internal_attribute_name))
                 continue
 
             if attribute_profile not in attribute_mapping:

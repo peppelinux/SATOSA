@@ -104,7 +104,8 @@ class ModuleRouter(object):
                    'from a Service Provider instead that '
                    'Discovery Service only. '
                    'If the authentication session is not inizialized '
-                   'by proxy\'s frontend this error will always throw up')
+                   'by a proxy frontend this error will always throw up. '
+                   'Please go back adn start again.')
             raise SATOSAStateError(msg.format('context.state[{}]["requester"]'.format(STATE_KEY)))
         target_frontend = context.state[STATE_KEY]
         msg = "Routing to frontend: {frontend}".format(frontend=target_frontend)
