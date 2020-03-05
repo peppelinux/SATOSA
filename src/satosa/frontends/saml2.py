@@ -381,7 +381,8 @@ class SAMLFrontend(FrontendModule, SAMLBaseModule):
         args.update(**resp_args)
 
         try:
-            args['sign_alg'] = getattr(xmldsig, sign_alg)
+            args['sign_alg'] = getattr(xmldsig,
+                                       util.xmldsig_validate_w3c_format(sign_alg))
         except AttributeError as e:
             msg = "Unsupported sign algorithm {}".format(sign_alg)
             logline = lu.LOG_FMT.format(id=lu.get_session_id(context.state), message=msg)
@@ -393,7 +394,8 @@ class SAMLFrontend(FrontendModule, SAMLBaseModule):
             logger.debug(logline)
 
         try:
-            args['digest_alg'] = getattr(xmldsig, digest_alg)
+            args['digest_alg'] = getattr(xmldsig,
+                                         util.xmldsig_validate_w3c_format(digest_alg))
         except AttributeError as e:
             msg = "Unsupported digest algorithm {}".format(digest_alg)
             logline = lu.LOG_FMT.format(id=lu.get_session_id(context.state), message=msg)

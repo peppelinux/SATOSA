@@ -9,6 +9,8 @@ import warnings as _warnings
 from base64 import urlsafe_b64encode
 from urllib.parse import urlparse
 
+
+import saml2.xmldsig
 from saml2 import BINDING_HTTP_REDIRECT
 from saml2.client_base import Base
 from saml2.config import SPConfig
@@ -259,6 +261,13 @@ class SAMLBackend(BackendModule, SAMLBaseModule):
                     raise SATOSAAuthenticationError(context.state, "Selected IdP is blacklisted for this backend")
 
         kwargs = {}
+        # backend support for selectable sign/digest algs
+        for alg in ('sign_alg', 'digest_alg'):
+            selected_alg = self.config['sp_config']['service']['sp'].get(alg)
+            if not selected_alg: continue
+            kwargs[alg] = getattr(saml2.xmldsig,
+                                  util.xmldsig_validate_w3c_format(selected_alg))
+
         authn_context = self.construct_requested_authn_context(entity_id)
         if authn_context:
             kwargs["requested_authn_context"] = authn_context
