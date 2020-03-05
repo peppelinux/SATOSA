@@ -15,6 +15,7 @@ from .routing import SATOSANoBoundEndpointError
 from saml2.s_utils import UnknownSystemEntity
 from .util import repr_saml
 
+
 logger = logging.getLogger(__name__)
 
 

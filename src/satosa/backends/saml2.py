@@ -259,8 +259,8 @@ class SAMLBackend(BackendModule, SAMLBaseModule):
                     logger.debug(logline, exc_info=False)
                     raise SATOSAAuthenticationError(context.state, "Selected IdP is blacklisted for this backend")
 
-        # options to be optionally filled in this
         kwargs = {}
+
         # backend support for selectable sign/digest algs
         for alg in ('sign_alg', 'digest_alg'):
             selected_alg = self.config['sp_config']['service']['sp'].get(alg)
