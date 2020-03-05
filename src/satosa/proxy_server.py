@@ -13,6 +13,7 @@ from .context import Context
 from .response import ServiceError, NotFound
 from .routing import SATOSANoBoundEndpointError
 from saml2.s_utils import UnknownSystemEntity
+from .util import repr_saml
 
 logger = logging.getLogger(__name__)
 
@@ -42,8 +43,13 @@ def unpack_post(environ, content_length):
     elif "application/json" in environ["CONTENT_TYPE"]:
         data = json.loads(post_body)
 
-    logline = "unpack_post:: {}".format(data)
-    logger.debug(logline)
+
+    logger.debug("unpack_post:: %s", data)
+
+    # fancy saml representation
+    saml_data = data.get('SAMLRequest') or data.get('SAMLResponse') or ''
+    logger.debug("read unpackacked post: {}".format(repr_saml(saml_data.encode(), b64=True)))
+
     return data
 
 
@@ -59,8 +65,11 @@ def unpack_request(environ, content_length=0):
     elif environ["REQUEST_METHOD"] == "POST":
         data = unpack_post(environ, content_length)
 
-    logline = "read request data: {}".format(data)
-    logger.debug(logline)
+    logger.debug("read request data: %s", data)
+
+    # fancy saml representation
+    saml_data = data.get('SAMLRequest') or data.get('SAMLResponse') or ''
+    logger.debug("saml request data: %s", repr_saml(saml_data.encode(), b64=True))
     return data
 
 
@@ -112,14 +121,15 @@ class WsgiApplication(SATOSABase):
 
         context.cookie = environ.get("HTTP_COOKIE", "")
         context.request_authorization = environ.get("HTTP_AUTHORIZATION", "")
-
         try:
             resp = self.run(context)
             if isinstance(resp, Exception):
                 raise resp
             return resp(environ, start_response)
         except SATOSANoBoundEndpointError:
-            resp = NotFound("The Service or Identity Provider you requested could not be found.")
+            resp = NotFound(
+                    "The Service or Identity Provider "
+                    "you requested could not be found.")
             return resp(environ, start_response)
         except Exception as err:
             if type(err) != UnknownSystemEntity:

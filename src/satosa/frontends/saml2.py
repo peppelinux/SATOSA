@@ -41,6 +41,7 @@ from satosa.internal import InternalData
 from satosa.deprecated import saml_name_id_format_to_hash_type
 from satosa.deprecated import hash_type_to_saml_name_id_format
 
+import satosa.util as util
 
 logger = logging.getLogger(__name__)
 
@@ -190,12 +191,15 @@ class SAMLFrontend(FrontendModule, SAMLBaseModule):
         """
         req_info = idp.parse_authn_request(context.request["SAMLRequest"], binding_in)
         authn_req = req_info.message
+
         msg = "{}".format(authn_req)
         logline = lu.LOG_FMT.format(id=lu.get_session_id(context.state), message=msg)
         logger.debug(logline)
 
         # keep the ForceAuthn value to be used by plugins
         context.decorate(Context.KEY_FORCE_AUTHN, authn_req.force_authn)
+	
+        logger.debug("%s" % util.repr_saml(str(authn_req)))
 
         try:
             resp_args = idp.response_args(authn_req)
