@@ -9,7 +9,6 @@ import warnings as _warnings
 from base64 import urlsafe_b64encode
 from urllib.parse import urlparse
 
-
 import saml2.xmldsig
 from saml2 import BINDING_HTTP_REDIRECT
 from saml2.client_base import Base
@@ -260,6 +259,7 @@ class SAMLBackend(BackendModule, SAMLBaseModule):
                     logger.debug(logline, exc_info=False)
                     raise SATOSAAuthenticationError(context.state, "Selected IdP is blacklisted for this backend")
 
+        # options to be optionally filled in this
         kwargs = {}
         # backend support for selectable sign/digest algs
         for alg in ('sign_alg', 'digest_alg'):
