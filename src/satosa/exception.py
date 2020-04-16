@@ -41,8 +41,8 @@ class SATOSAUnknownError(SATOSAError):
 class SATOSABackendNotFoundError(SATOSAError):
     """
     SATOSA Backend not existent/not found
-	"""
-	pass
+    """
+    pass
 
 
 class SATOSAUnknownErrorRedirectUrl(SATOSAError):
