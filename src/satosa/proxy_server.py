@@ -10,7 +10,8 @@ import pkg_resources
 from cookies_samesite_compat import CookiesSameSiteCompatMiddleware
 from .base import SATOSABase
 from .context import Context
-from .response import ServiceError, NotFound
+from .exception import SATOSAUnknownErrorRedirectUrl
+from .response import ServiceError, NotFound, Redirect
 from .routing import SATOSANoBoundEndpointError
 from saml2.s_utils import UnknownSystemEntity
 from .util import repr_saml
@@ -132,14 +133,16 @@ class WsgiApplication(SATOSABase):
                     "The Service or Identity Provider "
                     "you requested could not be found.")
             return resp(environ, start_response)
-        except Exception as err:
-            if type(err) != UnknownSystemEntity:
-                logline = "{}".format(err)
+        except SATOSAUnknownErrorRedirectUrl as e:
+            redirect_url, error_log = json.loads(str(e))
+            return Redirect(redirect_url)(environ, start_response)
+        except Exception as e:
+            if type(e) != UnknownSystemEntity:
+                logline = "{}".format(e)
                 logger.exception(logline)
             if debug:
                 raise
-
-            resp = ServiceError("%s" % err)
+            resp = ServiceError("%s" % e)
             return resp(environ, start_response)
 
 

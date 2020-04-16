@@ -294,7 +294,7 @@ class SAMLFrontend(FrontendModule, SAMLBaseModule):
                                                                 context.state)
             if approved_attributes:
                 approved_attributes = [i.lower() for i in approved_attributes]
-                internal_attributes = {k.lower():v for k,v in internal_response.attributes.items()}
+            internal_attributes = {k.lower():v for k,v in internal_response.attributes.items()}
             attributes = {k: v for k, v in internal_attributes.items() if k in approved_attributes}
         return attributes
 
