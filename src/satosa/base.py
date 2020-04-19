@@ -316,8 +316,7 @@ class SATOSABase(object):
             logger.error(logline, exc_info=True)
             redirect_url = self.config.get("UNKNOW_ERROR_REDIRECT_PAGE")
             if redirect_url:
-                raise SATOSAUnknownErrorRedirectUrl(json.dumps((redirect_url,
-                                                                logline)))
+                raise SATOSAUnknownErrorRedirectUrl((redirect_url, logline))
             else:
                 raise SATOSAUnknownError("Unknown error") from err
              

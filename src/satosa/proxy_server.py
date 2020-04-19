@@ -134,7 +134,8 @@ class WsgiApplication(SATOSABase):
                     "you requested could not be found.")
             return resp(environ, start_response)
         except SATOSAUnknownErrorRedirectUrl as e:
-            redirect_url, error_log = json.loads(str(e))
+            redirect_url, error_log =  e.args[0][0], e.args[0][1]
+            logger.debug('{}: Redirecting to "{}"'.format(error_log, redirect_url))
             return Redirect(redirect_url)(environ, start_response)
         except Exception as e:
             if type(e) != UnknownSystemEntity:
