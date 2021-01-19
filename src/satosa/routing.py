@@ -158,6 +158,20 @@ class ModuleRouter(object):
         path_split = context.path.split("/")
         backend = path_split[0]
 
+        # Target router interception
+        trouter_microservice_name = 'TargetRouter'
+        if context.request and context.request.get('entityID') and \
+        trouter_microservice_name in self.micro_services:
+            tr_microservice = self.micro_services[trouter_microservice_name]['instance']
+            tr_result = tr_microservice.get_backend_by_endpoint_path(context,
+                                                                     backend,
+                                                                     self.backends)
+            if tr_result:
+                backend, context.path = tr_result
+                context.target_backend = backend
+                return self._find_registered_backend_endpoint(context)
+        # end Target router interception
+
         if backend in self.backends:
             context.target_backend = backend
         else:
@@ -171,6 +185,7 @@ class ModuleRouter(object):
             name, frontend_endpoint = self._find_registered_endpoint(context, self.frontends)
         except ModuleRouter.UnknownEndpoint:
             pass
+            # satosa_logging(logger, logging.DEBUG, "%s is a unknown endpoint" % backend, context.state)
         else:
             context.target_frontend = name
             return frontend_endpoint

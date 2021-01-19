@@ -15,6 +15,7 @@ from .response import ServiceError, NotFound
 from .routing import SATOSANoBoundEndpointError
 from saml2.s_utils import UnknownSystemEntity
 
+
 logger = logging.getLogger(__name__)
 
 
@@ -113,7 +114,6 @@ class WsgiApplication(SATOSABase):
 
         context.cookie = environ.get("HTTP_COOKIE", "")
         context.request_authorization = environ.get("HTTP_AUTHORIZATION", "")
-
         try:
             resp = self.run(context)
             if isinstance(resp, Exception):
