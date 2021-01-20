@@ -70,7 +70,7 @@ class DecideBackendByTarget(RequestMicroService):
                                                                       entity_id,
                                                                       native_backend,
                                                                       tr_backend)
-                satosa_logging(logger, logging.INFO, msg, context.state)
+                logger.info(msg, context.state)
                 return (tr_backend, tr_path)
         return
 
