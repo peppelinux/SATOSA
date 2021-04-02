@@ -31,6 +31,13 @@ class SATOSACriticalError(SATOSAError):
     pass
 
 
+class SATOSABackendNotFoundError(SATOSAError):
+    """
+    SATOSA Backend not existent/not found
+    """
+    pass
+
+
 class SATOSAUnknownError(SATOSAError):
     """
     SATOSA unknown error

@@ -1,13 +1,73 @@
 import logging
-from base64 import urlsafe_b64encode
+import re
 
+from base64 import urlsafe_b64encode
 from satosa.context import Context
 from .base import RequestMicroService
 from ..exception import SATOSAConfigurationError
 from ..exception import SATOSAError
+from ..exception import SATOSABackendNotFoundError
 
 
 logger = logging.getLogger(__name__)
+
+
+class DecideBackendByTarget(RequestMicroService):
+    """
+    Select which backend should be used based on who is the SAML IDP
+    """
+
+    def __init__(self, config, *args, **kwargs):
+        """
+        Constructor.
+        :param config: mapping from requester identifier to
+        backend module name under the key 'requester_mapping'
+        :type config: Dict[str, Dict[str, str]]
+        """
+        super().__init__(*args, **kwargs)
+        self.target_mapping = config['target_mapping']
+
+
+    def get_backend_by_endpoint_path(self, context, native_backend,
+                                     backends):
+        """
+        Returns a new path and target_backend according to its maps
+
+        :type context: satosa.context.Context
+        :rtype: ((satosa.context.Context, Any) -> Any, Any)
+
+        :param context: The request context
+        :param native_backed: the backed that the proxy normally have been used
+        :param backends: list of all the backend configured in the proxy
+
+        :return: tuple or None
+        """
+        entity_id = context.request.get('entityID')
+        tr_backend = self.target_mapping.get(entity_id)
+
+        if not all((context.request,
+                    entity_id,
+                    entity_id in self.target_mapping.keys(),
+                    tr_backend)):
+            return
+
+        if not backends.get(tr_backend):
+            raise SATOSABackendNotFoundError(
+                f"'{tr_backend}' not found in proxy_conf.yaml"
+            )
+
+        tr_path = context.path.replace(native_backend, tr_backend)
+        for endpoint in backends[tr_backend]['endpoints']:
+            if re.match(endpoint[0], tr_path):
+                msg = (f'Found DecideBackendByTarget ({self.name} microservice) '
+                       f'redirecting {entity_id} from {native_backend} '
+                       f'backend to {tr_backend}')
+                logger.info(msg)
+                context.path = tr_path
+                context.target_backend = tr_backend
+                return tr_backend, endpoint
+
+        return False
 
 
 class DecideBackendByRequester(RequestMicroService):

@@ -158,14 +158,31 @@ class ModuleRouter(object):
         path_split = context.path.split("/")
         backend = path_split[0]
 
-        if backend in self.backends:
-            context.target_backend = backend
-        else:
-            msg = "Unknown backend {}".format(backend)
-            logline = lu.LOG_FMT.format(
-                id=lu.get_session_id(context.state), message=msg
-            )
-            logger.debug(logline)
+        # Target router interception
+        tr_microservice = self.micro_services.get('TargetRouter', {}).get('instance')
+        if tr_microservice:
+            tr_result = tr_microservice.get_backend_by_endpoint_path(
+                            context, backend, self.backends
+                        )
+            if tr_result:
+                # this will only handle context
+                self._find_registered_backend_endpoint(context)
+
+                # this next would speed up the things ...
+                # tr_backend, endpoint = self._find_registered_backend_endpoint(context)
+                # return endpoint
+        # end Target router interception
+
+        # skip if context.target_backend was previously configured by some middleware [WiP]
+        if not context.target_backend:
+            if backend in self.backends:
+                context.target_backend = backend
+            else:
+                msg = "Unknown backend {}".format(backend)
+                logline = lu.LOG_FMT.format(
+                    id=lu.get_session_id(context.state), message=msg
+                )
+                logger.debug(logline)
 
         try:
             name, frontend_endpoint = self._find_registered_endpoint(context, self.frontends)
