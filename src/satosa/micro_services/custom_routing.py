@@ -69,9 +69,30 @@ class DecideBackendByTarget(RequestMicroService):
             self.default_backend
         )
 
+    def process(self, context, data):
+        """
+        Will modify the context.target_backend attribute based on the target entityid.
+        :param context: request context
+        :param data: the internal request
+        """
+        entity_id = context.request.get('entityID')
+        if entity_id:
+            self._rewrite_context(entity_id, context)
+        return super().process(context, data)
+
+    def _rewrite_context(self, entity_id, context) -> None:
+        tr_backend = self._get_backend(context, entity_id)
+        context.internal_data['target_entity_id'] = entity_id
+        context.target_frontend = context.target_frontend or context.state['ROUTER']
+        native_backend = context.target_backend
+        msg = (f'Found DecideBackendByTarget ({self.name} microservice) '
+               f'redirecting {entity_id} from {native_backend} '
+               f'backend to {tr_backend}')
+        logger.info(msg)
+        context.target_backend = tr_backend
+
     def backend_by_entityid(self, context):
         entity_id = context.request.get('entityID')
-        tr_backend = self._get_backend(context, entity_id)
 
         if not context.state.get('ROUTER'):
             raise SATOSAStateError(
@@ -80,14 +101,7 @@ class DecideBackendByTarget(RequestMicroService):
             )
 
         if entity_id:
-            context.internal_data['target_entity_id'] = entity_id
-            context.target_frontend = context.state['ROUTER']
-            native_backend = context.target_backend
-            msg = (f'Found DecideBackendByTarget ({self.name} microservice) '
-                   f'redirecting {entity_id} from {native_backend} '
-                   f'backend to {tr_backend}')
-            logger.info(msg)
-            context.target_backend = tr_backend
+            self._rewrite_context(entity_id, context)
         else:
             raise CustomRoutingError(
                 f"{self.__class__.__name__} "
