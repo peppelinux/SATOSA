@@ -53,5 +53,4 @@ class IdpHinting(RequestMicroService):
                 context.internal_data['target_entity_id'] = entity_id
                 context.request['entityID'] = entity_id
                 break
-
         return super().process(context, data)

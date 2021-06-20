@@ -99,6 +99,20 @@ class SAMLFrontend(FrontendModule, SAMLBaseModule):
         """
         return self._handle_authn_request(context, binding_in, self.idp)
 
+    def handle_logout_request(self, context, binding_in):
+        """
+        This method is bound to the starting endpoint of the authentication.
+
+        :type context: satosa.context.Context
+        :type binding_in: str
+        :rtype: satosa.response.Response
+
+        :param context: The current context
+        :param binding_in: The binding type (http post, http redirect, ...)
+        :return: response
+        """
+        return self._handle_logout_request(context, binding_in, self.idp)
+
     def handle_backend_error(self, exception):
         """
         See super class satosa.frontends.base.FrontendModule
@@ -172,6 +186,16 @@ class SAMLFrontend(FrontendModule, SAMLBaseModule):
             except KeyError as e:
                 raise ValueError("Missing configuration key: %s" % key) from e
 
+    def _handle_logout_request(context, binding_in, idp):
+
+        req_info = idp.parse_logout_request(context.request["SAMLRequest"], binding_in)
+        authn_req = req_info.message
+        msg = "{}".format(authn_req)
+        logline = lu.LOG_FMT.format(id=lu.get_session_id(context.state), message=msg)
+        logger.debug(logline)
+        # TODO in satosa.base ...
+        return self.logout_req_callback_func(context, internal_req)
+
     def _handle_authn_request(self, context, binding_in, idp):
         """
         See doc for handle_authn_request method.
@@ -186,6 +210,7 @@ class SAMLFrontend(FrontendModule, SAMLBaseModule):
         :param idp: The saml frontend idp server
         :return: response
         """
+
         req_info = idp.parse_authn_request(context.request["SAMLRequest"], binding_in)
         authn_req = req_info.message
         msg = "{}".format(authn_req)
@@ -501,8 +526,14 @@ class SAMLFrontend(FrontendModule, SAMLBaseModule):
                     valid_providers = "{}|^{}".format(valid_providers, provider)
                 valid_providers = valid_providers.lstrip("|")
                 parsed_endp = urlparse(endp)
-                url_map.append(("(%s)/%s$" % (valid_providers, parsed_endp.path),
-                                functools.partial(self.handle_authn_request, binding_in=binding)))
+                if endp_category == 'single_sign_on_service':
+                    url_map.append(("(%s)/%s$" % (valid_providers, parsed_endp.path),
+                                    functools.partial(self.handle_authn_request, binding_in=binding)))
+                elif endp_category == 'single_logout_service':
+                    url_map.append(("(%s)/%s$" % (valid_providers, parsed_endp.path),
+                                    functools.partial(self.handle_logout, binding_in=binding)))
+                else:
+                    raise NotImplementedError(endp_category)
 
         if self.expose_entityid_endpoint():
             parsed_entity_id = urlparse(self.idp.config.entityid)
