@@ -83,7 +83,7 @@ class DecideBackendByTarget(RequestMicroService):
     def _rewrite_context(self, entity_id, context) -> None:
         tr_backend = self._get_backend(context, entity_id)
         context.internal_data['target_entity_id'] = entity_id
-        context.target_frontend = context.target_frontend or context.state['ROUTER']
+        context.target_frontend = context.target_frontend or context.state.get('ROUTER')
         native_backend = context.target_backend
         msg = (f'Found DecideBackendByTarget ({self.name} microservice) '
                f'redirecting {entity_id} from {native_backend} '
