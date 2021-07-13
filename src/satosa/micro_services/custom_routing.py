@@ -60,6 +60,12 @@ class DecideBackendByTargetIdP(RequestMicroService):
             for path in self.endpoint_paths
         ]
 
+    def _get_request_entity_id(self, context):
+        return (
+            context.get_decoration(Context.KEY_TARGET_ENTITYID) or
+            context.request.get('entityID')
+        )
+
     def _get_backend(self, context:Context, entity_id:str) -> str:
         """
         returns the Target Backend to use
@@ -75,7 +81,7 @@ class DecideBackendByTargetIdP(RequestMicroService):
         :param context: request context
         :param data: the internal request
         """
-        entity_id = context.request.get('entityID')
+        entity_id = self._get_request_entity_id(context)
         if entity_id:
             self._rewrite_context(entity_id, context)
         return super().process(context, data)
@@ -92,13 +98,7 @@ class DecideBackendByTargetIdP(RequestMicroService):
         context.target_backend = tr_backend
 
     def backend_by_entityid(self, context:Context):
-        entity_id = context.request.get('entityID')
-
-        if not context.state.get('ROUTER'):
-            raise SATOSAStateError(
-                f"{self.__class__.__name__} "
-                "can't find any valid state in the context."
-            )
+        entity_id = self._get_request_entity_id(context)
 
         if entity_id:
             self._rewrite_context(entity_id, context)
@@ -106,6 +106,12 @@ class DecideBackendByTargetIdP(RequestMicroService):
             raise CustomRoutingError(
                 f"{self.__class__.__name__} "
                 "can't find any valid entity_id in the context."
+            )
+
+        if not context.state.get('ROUTER'):
+            raise SATOSAStateError(
+                f"{self.__class__.__name__} "
+                "can't find any valid state in the context."
             )
 
         data_serialized = context.state.get(self.name, {}).get("internal", {})
