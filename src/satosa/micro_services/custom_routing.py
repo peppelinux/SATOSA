@@ -60,7 +60,7 @@ class DecideBackendByTarget(RequestMicroService):
             for path in self.endpoint_paths
         ]
 
-    def _get_backend(self, context:str, entity_id:str) -> str:
+    def _get_backend(self, context:Context, entity_id:str) -> str:
         """
         returns the Target Backend to use
         """
