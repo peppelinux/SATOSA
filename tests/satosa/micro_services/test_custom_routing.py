@@ -190,20 +190,6 @@ class TestDecideBackendByTargetIdP:
             decide_service.backend_by_entityid(target_context)
 
 
-    def test_missing_entityid(self, target_context):
-        decide_service = self.create_decide_service(self.rules)
-        target_context.request = {
-            # 'entityID': None,
-        }
-        target_context.state['ROUTER'] = 'Saml2'
-
-        req = InternalData(requester="test_requester")
-        assert decide_service.process(target_context, req)
-
-        with pytest.raises(CustomRoutingError):
-            decide_service.backend_by_entityid(target_context)
-
-
     def test_unmatching_target(self, target_context):
         """
             It would rely on the default backend
