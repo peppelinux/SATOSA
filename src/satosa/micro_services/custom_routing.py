@@ -20,7 +20,7 @@ class CustomRoutingError(SATOSAError):
     pass
 
 
-class DecideBackendByTarget(RequestMicroService):
+class DecideBackendByTargetIdP(RequestMicroService):
     """
     Select which backend should be used based on who is the SAML IDP
     """

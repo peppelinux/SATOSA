@@ -6,7 +6,7 @@ from satosa.context import Context
 from satosa.exception import SATOSAError, SATOSAConfigurationError, SATOSAStateError
 from satosa.internal import InternalData
 from satosa.micro_services.custom_routing import DecideIfRequesterIsAllowed
-from satosa.micro_services.custom_routing import DecideBackendByTarget
+from satosa.micro_services.custom_routing import DecideBackendByTargetIdP
 from satosa.micro_services.custom_routing import CustomRoutingError
 
 TARGET_ENTITY = "entity1"
@@ -160,7 +160,7 @@ class TestDecideIfRequesterIsAllowed:
             decide_service.process(context, req)
 
 
-class TestDecideBackendByTarget:
+class TestDecideBackendByTargetIdP:
     rules = {
         'default_backend': 'Saml2',
         'endpoint_paths': ['.*/disco'],
@@ -168,7 +168,7 @@ class TestDecideBackendByTarget:
     }
 
     def create_decide_service(self, rules):
-        decide_service = DecideBackendByTarget(
+        decide_service = DecideBackendByTargetIdP(
                 config=rules,
                 name="test_decide_service",
                 base_url="https://satosa.example.com"
