@@ -25,7 +25,7 @@ class DecideBackendByTargetIdP(RequestMicroService):
     Select which backend should be used based on who is the SAML IDP
     """
 
-    def __init__(self, config, *args, **kwargs):
+    def __init__(self, config:dict, *args, **kwargs):
         """
         Constructor.
         :param config: microservice configuration loaded from yaml file
@@ -69,7 +69,7 @@ class DecideBackendByTargetIdP(RequestMicroService):
             self.default_backend
         )
 
-    def process(self, context, data):
+    def process(self, context:Context, data:dict):
         """
         Will modify the context.target_backend attribute based on the target entityid.
         :param context: request context
@@ -80,7 +80,7 @@ class DecideBackendByTargetIdP(RequestMicroService):
             self._rewrite_context(entity_id, context)
         return super().process(context, data)
 
-    def _rewrite_context(self, entity_id, context) -> None:
+    def _rewrite_context(self, entity_id:str, context:Context) -> None:
         tr_backend = self._get_backend(context, entity_id)
         context.decorate(Context.KEY_TARGET_ENTITYID, entity_id)
         context.target_frontend = context.target_frontend or context.state.get('ROUTER')
@@ -91,7 +91,7 @@ class DecideBackendByTargetIdP(RequestMicroService):
         logger.info(msg)
         context.target_backend = tr_backend
 
-    def backend_by_entityid(self, context):
+    def backend_by_entityid(self, context:Context):
         entity_id = context.request.get('entityID')
 
         if not context.state.get('ROUTER'):
