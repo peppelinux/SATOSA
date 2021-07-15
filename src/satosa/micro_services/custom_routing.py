@@ -46,15 +46,17 @@ class DecideBackendByTargetIssuer(RequestMicroService):
             self.target_mapping.get(target_issuer)
             or self.default_backend
         )
-
+        target_frontend = context.target_frontend or context.state.get('ROUTER')
         report = {
             'msg': 'decided target backend by target issuer',
             'target_issuer': target_issuer,
             'target_backend': target_backend,
+            'target_frontend': target_frontend,
         }
         logger.info(report)
 
         context.target_backend = target_backend
+        context.target_frontend = target_frontend
         return super().process(context, data)
 
 
