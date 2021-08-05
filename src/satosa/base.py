@@ -99,7 +99,6 @@ class SATOSABase(object):
 
         if self.request_micro_services:
             return self.request_micro_services[0].process(context, internal_request)
-
         return self._auth_req_finish(context, internal_request)
 
     def _auth_req_finish(self, context, internal_request):

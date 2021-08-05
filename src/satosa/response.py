@@ -113,3 +113,7 @@ class Unauthorized(Response):
 
     def __init__(self, message, headers=None, content=None):
         super().__init__(message, headers=headers, content=content)
+
+
+class JsonResponse(Response):
+    _content_type = "application/json"
