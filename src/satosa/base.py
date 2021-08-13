@@ -180,9 +180,7 @@ class SATOSABase(object):
         except SATOSAAuthenticationError as error:
             error.error_id = uuid.uuid4().urn
             state = json.dumps(error.state.state_dict, indent=4)
-            msg = "ERROR_ID [{err_id}]\nSTATE:\n{state}".format(
-                err_id=error.error_id, state=state
-            )
+            msg = f"ERROR_ID [{error.error_id}]\nSTATE:\n{state}"
             logline = lu.LOG_FMT.format(id=lu.get_session_id(context.state), message=msg)
             logger.error(logline, error.state, exc_info=True)
             return self._handle_satosa_authentication_error(error)
@@ -204,7 +202,7 @@ class SATOSABase(object):
             state = State()
         finally:
             context.state = state
-            msg = "Loaded state {state} from cookie {cookie}".format(state=state, cookie=context.cookie)
+            msg = f"Loaded state {state} from cookie {context.cookie}"
             logline = lu.LOG_FMT.format(id=lu.get_session_id(context.state), message=msg)
             logger.info(logline)
 
