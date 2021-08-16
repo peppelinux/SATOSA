@@ -1,7 +1,4 @@
-from oidcop.user_authn.user import verify_signed_jwt, UserAuthnMethod
-from typing import List
-
-import time
+from oidcop.user_authn.user import UserAuthnMethod
 
 
 class SatosaAuthnMethod(UserAuthnMethod):

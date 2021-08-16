@@ -1,10 +1,10 @@
 """
 The OpenID Connect frontend module for the satosa proxy
 """
+import base64
 import json
 import logging
-from collections import defaultdict
-from urllib.parse import urlencode, urlparse
+import os
 
 from oidcop.authn_event import create_authn_event
 from oidcop.exception import InvalidClient
@@ -15,12 +15,15 @@ from oidcop.oidc.token import Token
 from oidcmsg.oauth2 import ResponseMessage
 from oidcmsg.oidc import AccessTokenRequest
 from oidcmsg.oidc import AuthorizationRequest
+from urllib.parse import urlencode, urlparse
 
 from .base import FrontendModule
 from .oidcop.application import oidcop_application as oidcop_app
+from .oidcop.claims import *
 from .oidcop.models import get_client_by_id
+from .oidcop.user_info import SatosaOidcUserInfo
 from ..response import BadRequest, Created
-from ..response import SeeOther, JsonResponse
+from ..response import SeeOther, JsonResponse, Response
 from ..response import Unauthorized
 from ..util import rndstr
 
@@ -38,21 +41,27 @@ IGNORED_HEADERS = ["cookie", "user-agent"]
 logger = logging.getLogger(__name__)
 
 
-class OidcOpFrontend(FrontendModule):
+class OidcOpUtils(object):
     """
-    The OpenID Connect frontend module
+    Interoperability class between satosa and oidcop
     """
 
-    def __init__(self, auth_req_callback_func, internal_attributes, conf, base_url, name):
-        super().__init__(auth_req_callback_func, internal_attributes, base_url, name)
-        self.app = oidcop_app(conf)
-        self.config = self.app.srv_config
-        jwks_public_path = self.config['keys']['public_path']
-        with open(jwks_public_path) as f:
-            self.jwks_public = f.read()
-
-        # registered endpoints will be filled by self.register_endpoints
-        self.endpoints = None
+    def _fill_cdb(self, context: Context) -> None:
+        """
+            gets client_id from local storage and updates the client DB
+        """
+        client_id = context.request.get('client_id')
+        _msg = f'Client {client_id} not found!'
+        if client_id:
+            client = get_client_by_id(client_id)
+            if client:
+                ec = self.app.endpoint_context
+                ec.endpoint_context.cdb = {
+                    client_id: client
+                }
+        else:
+            logger.warning(_msg)
+            raise InvalidClient(_msg)
 
     def _load_storage(self):
         """
@@ -60,29 +69,10 @@ class OidcOpFrontend(FrontendModule):
         """
         self.storage = self.app["storage"]
 
-    def register_endpoints(self, backend_names):
-        """
-        See super class satosa.frontends.base.FrontendModule
-        :type backend_names: list[str]
-        :rtype: list[(str, ((satosa.context.Context, Any) -> satosa.response.Response, Any))]
-        :raise ValueError: if more than one backend is configured
-        """
-        url_map = [
-            (v['path'], getattr(self, f"{k}_endpoint"))
-            for k,v in self.config.endpoint.items()
-        ]
-
-        # add jwks.json webpath
-        uri_path = self.config['keys']['uri_path']
-        url_map.append(
-            (uri_path, self.jwks_endpoint)
-        )
-
-        logger.debug(f"Loaded OIDC Provider endpoints: {url_map}")
-        self.endpoints = url_map
-        return url_map
-
     def _get_http_info(self, context: Context):
+        """
+        aligns parameters for oidcop interoperability needs
+        """
         _cookies = []
         for i in context.cookie.split(';'):
             splitted = i.split('=')
@@ -106,21 +96,52 @@ class OidcOpFrontend(FrontendModule):
         }
         if _cookies:
             http_info['cookie'] = _cookies
+
+        # for token and userinfo endpoint ... but also for authz endpoint sometimes
+        if getattr(context, 'request_authorization', None):
+            http_info['headers'] = {
+                "authorization": context.request_authorization
+            }
         return http_info
 
-    def _get_http_data(self, context: Context):
-        data = {}
-        _method = context._http_headers['REQUEST_METHOD']
-        # TODO
-        # if _method == 'GET':
-            # data = {k: v for k, v in context.request}
-        # elif _method == 'POST':
-            # data = {k: v for k, v in context.request}
 
-        # if not data and request.body:
-            # data = json.loads(context.request)
+class OidcOpFrontend(FrontendModule, OidcOpUtils):
+    """
+    OpenID Connect frontend module based on idpy oidcop
+    """
 
-        return context.request
+    def __init__(self, auth_req_callback_func, internal_attributes, conf, base_url, name):
+        super().__init__(auth_req_callback_func, internal_attributes, base_url, name)
+        self.app = oidcop_app(conf)
+        self.config = self.app.srv_config
+        jwks_public_path = self.config['keys']['public_path']
+        with open(jwks_public_path) as f:
+            self.jwks_public = f.read()
+
+        # registered endpoints will be filled by self.register_endpoints
+        self.endpoints = None
+
+    def register_endpoints(self, backend_names):
+        """
+        See super class satosa.frontends.base.FrontendModule
+        :type backend_names: list[str]
+        :rtype: list[(str, ((satosa.context.Context, Any) -> satosa.response.Response, Any))]
+        :raise ValueError: if more than one backend is configured
+        """
+        url_map = [
+            (v['path'], getattr(self, f"{k}_endpoint"))
+            for k,v in self.config.endpoint.items()
+        ]
+
+        # add jwks.json webpath
+        uri_path = self.config['keys']['uri_path']
+        url_map.append(
+            (uri_path, self.jwks_endpoint)
+        )
+
+        logger.debug(f"Loaded OIDC Provider endpoints: {url_map}")
+        self.endpoints = url_map
+        return url_map
 
     def jwks_endpoint(self, context: Context):
         """
@@ -149,31 +170,57 @@ class OidcOpFrontend(FrontendModule):
         logger.info(f'Request at the "{endpoint.name}" endpoint')
         http_info = self._get_http_info(context)
 
-        data = self._get_http_data(context)
-        req_args = endpoint.parse_request(data, http_info=http_info)
-        args = endpoint.process_request(req_args, http_info=http_info)
+        parse_req = endpoint.parse_request(context.request, http_info=http_info)
+        proc_req = endpoint.process_request(parse_req, http_info=http_info)
 
-        info = endpoint.do_response(
-            request=context.request, **args
-        )
-        # http_headers = info['http_headers']
-        response = info['response']
-        return JsonResponse(response)
+        info = endpoint.do_response(request=context.request, **proc_req)
+        return JsonResponse(info['response'])
 
+    def handle_error(self, msg: str = None, excp: str = None, status: str = "403"):
+        _msg = f'Something went wrong ... {excp or ""}'
+        msg = msg or _msg
+        logger.error(msg)
+        return JsonResponse(msg, status=status)
 
-    def _fill_cdb(self, context: Context) -> None:
-        client_id = context.request.get('client_id')
-        _msg = f'Client {client_id} not found!'
-        if client_id:
-            client = get_client_by_id(client_id)
-            if client:
-                ec = self.app.endpoint_context
-                ec.endpoint_context.cdb = {
-                    client_id: client
-                }
+    def _parse_request(self, endpoint, request_data, context: Context, http_info={}):
+        """
+        Returns a parsed request
+        """
+        http_info = http_info or self._get_http_info(context)
+        parse_req = endpoint.parse_request(request_data, http_info=http_info)
+        return parse_req
+
+    def _process_request(self, context: Context, endpoint, parse_req, http_info):
+        """
+        Authorization, Token and userinfo
+        """
+        if isinstance(endpoint, Token):
+            try:
+                _req = AccessTokenRequest(**parse_req)
+            except Exception as err:
+                logger.error(err)
+                return JsonResponse({
+                    'error': 'invalid_request',
+                    'error_description': str(err),
+                }, status="400")
         else:
-            logger.warning(_msg)
-            raise InvalidClient(_msg)
+            _req = parse_req
+
+        try:
+            proc_req = endpoint.process_request(_req, http_info=http_info)
+            return proc_req
+        except (InvalidClient, UnknownClient, UnAuthorizedClient) as err:
+            logger.error(err)
+            return JsonResponse({
+                'error': 'unauthorized_client',
+                'error_description': str(err)
+            }, status="400")
+        except Exception as err:
+            logger.error(err)
+            return JsonResponse({
+                'error': 'invalid_request',
+                'error_description': str(err),
+            }, status="400")
 
     def _handle_authn_request(self, context: Context, endpoint):
         """
@@ -192,41 +239,34 @@ class OidcOpFrontend(FrontendModule):
         logger.debug(logline)
 
         http_info = self._get_http_info(context)
-        data = self._get_http_data(context)
-        req_args = endpoint.parse_request(data, http_info=http_info)
-        args = endpoint.process_request(req_args, http_info=http_info)
-
-        info = endpoint.do_response(
-            request=context.request, **args
+        parse_req = self._parse_request(
+            endpoint, context.request, context, http_info=http_info
         )
-        # http_headers = info['http_headers']
-        response = info['response']
+        proc_req = self._process_request(context, endpoint, parse_req, http_info)
+        if isinstance(proc_req, JsonResponse):
+            return proc_req
 
-        # TODO logging and error handling
-        # something to be done with the help of some unit test
+        # TODO - some tests and specialized exceptions here ...
+        try:
+            info = endpoint.do_response(
+                request=context.request, **proc_req
+            )
+        except Exception as excp:
+            # TODO logging and error handling
+            # something to be done with the help of unit test
 
-        # try:
-            # authn_req = self.provider.parse_authentication_request(request)
-        # except InvalidAuthenticationRequest as e:
-            # msg = "Error in authn req: {}".format(str(e))
-            # logline = lu.LOG_FMT.format(id=lu.get_session_id(context.state), message=msg)
-            # logger.error(logline)
-            # error_url = e.to_error_url()
+            # this should be for humans if auth code flow
+            # and JsonResponse for other flows ...
+            self.handle_error(excp=excp)
 
-            # if error_url:
-                # return SeeOther(error_url)
-            # else:
-                # return BadRequest("Something went wrong: {}".format(str(e)))
-
-        # clients
-        # endpoint.server_get('endpoint_context').cdb
-        client_id = req_args.get('client_id')
+        # response = info['response']
         context.state[self.name] = {"oidc_request": request}
 
+        client_id = parse_req.get('client_id')
         _client_conf = endpoint.server_get('endpoint_context').cdb[client_id]
+        client_name = _client_conf.get("client_name")
         subject_type = _client_conf.get("subject_type", "pairwise")
 
-        client_name = _client_conf.get("client_name")
         if client_name:
             requester_name = [{"lang": "en", "text": client_name}]
         else:
@@ -239,37 +279,27 @@ class OidcOpFrontend(FrontendModule):
         )
 
         _claims_supported = self.config['capabilities']['claims_supported']
+
+        # TODO - additional filter here?
         # _approved_attributes = self._get_approved_attributes(
                 # _claims_supported, authn_req
         # )
+
         internal_req.attributes = self.converter.to_internal_filter(
             "openid", _claims_supported
         )
 
-        # otherwise exception here ...
+        # TODO - have a default backend, otherwise exception here ...
         context.target_backend = self.app.default_target_backend
 
         context.internal_data = internal_req
         return internal_req
 
-    #@prepare_oidc_endpoint
-    def authorization_endpoint(self, context: Context):
-        self._fill_cdb(context)
-        _endpoint = self.app.endpoint_context.endpoint['authorization']
-        internal_req = self._handle_authn_request(context, _endpoint)
-        if not isinstance(internal_req, InternalData):
-            return internal_req
-
-        return self.auth_req_callback_func(context, internal_req)
-
-    def introspection_endpoint(self, context: Context):
-        pass
-
     def handle_authn_request(self, context: Context):
         """
         Handle an authentication request and pass it on to the backend.
         :type context: satosa.context.Context
-        :rtype: oic.utils.http_util.Response
+        :rtype: satosa.response.SeeOther
 
         :param context: the current context
         :return: HTTP response to the client
@@ -279,62 +309,142 @@ class OidcOpFrontend(FrontendModule):
             return internal_req
         return self.auth_req_callback_func(context, internal_req)
 
+    #@prepare_oidc_endpoint
+    def authorization_endpoint(self, context: Context):
+        """
+        OAuth2 / OIDC Authorization endpoint
+        Checks client_id and handles the authorization request
+        """
+        self._fill_cdb(context)
+        _endpoint = self.app.endpoint_context.endpoint['authorization']
+        internal_req = self._handle_authn_request(context, _endpoint)
+        if not isinstance(internal_req, InternalData):
+            return internal_req
+
+        return self.auth_req_callback_func(context, internal_req)
+
+    def _handle_backend_response(self, context, internal_resp):
+        """
+        Called by handle_authn_response, once a backend made its work
+        :type context: satosa.context.Context
+        :type internal_res: satosa.internal.InternalData
+        :rtype: satosa.response.Response
+
+        :param context: the current context
+        :param internal_resp: satosa internal data
+        :return: HTTP response to the client
+        """
+        http_info = self._get_http_info(context)
+        oidc_req = context.state[self.name]['oidc_request']
+        endpoint = self.app.endpoint_context.endpoint['authorization']
+
+        # the same of authz_request ...
+        # parse_req = self._parse_request(
+            # _endpoint, oidc_req, context, http_info
+        # )
+        parse_req = AuthorizationRequest().from_urlencoded(oidc_req)
+
+        proc_req = self._process_request(context, endpoint, parse_req, http_info)
+        # proc_req example:
+        #   {'http_response': None, 'return_uri': 'https://127.0.0.1:8090/authz_cb/satosa'}
+
+        if isinstance(proc_req, JsonResponse):
+            return proc_req
+
+        client_id = parse_req["client_id"]
+        sub = internal_resp.subject_id
+
+        authn_event = create_authn_event(
+            uid=sub,
+            salt=base64.b64encode(os.urandom(self.app.salt_size)).decode(),
+            # TODO
+            #authn_info=auth_args['authn_class_ref'],
+            #authn_time=auth_args['iat']
+        )
+
+        _token_usage_rules = endpoint.server_get(
+            "endpoint_context").authn_broker.get_method_by_id('user')
+
+        ec = self.app.endpoint_context
+        session_manager = ec.endpoint_context.session_manager
+        _session_id = session_manager.create_session(
+            authn_event=authn_event,
+            auth_req=parse_req,
+            user_id=sub,
+            client_id=client_id,
+            token_usage_rules=_token_usage_rules
+        )
+
+        try:
+            # _args is a dict that contains:
+            #  - oidcmsg.oidc.AuthorizationResponse
+            #  - session_id
+            #  - cookie (only need for logout -> not yet supported by Satosa)
+            _args = endpoint.authz_part2(user=sub,
+                                         session_id=_session_id,
+                                         request=parse_req,
+                                         authn_event=authn_event)
+        except ValueError as excp:
+            # TODO - cover with unit test and add some satosa logging ...
+            return self.handle_error(excp = excp)
+        except Exception as excp:
+            return self.handle_error(excp = excp)
+
+        if isinstance(_args, ResponseMessage) and 'error' in _args:
+            return JsonResponse(_args, status="400")
+        elif isinstance(_args.get('response_args'), AuthorizationErrorResponse):
+            rargs = _args.get('response_args')
+            logger.error(rargs)
+            return JsonResponse(rargs.to_json(), status="400")
+
+        info = endpoint.do_response(request=parse_req, **proc_req)
+        info_response = info['response']
+        _response_placement = info.get(
+            'response_placement', endpoint.response_placement
+        )
+        if _response_placement == 'body':
+            # TODO - not tested!
+            logger.debug(f'Response [Body]: {info_response}')
+            resp = Response(info_response)
+        elif _response_placement == 'url':
+            data = _args['response_args'].to_dict()
+            redirect_url = info_response+f'{urlencode(data)}'
+            logger.debug(f'Redirect to: {redirect_url}')
+            resp = SeeOther(redirect_url)
+        else:
+            raise NotImplementedError()
+
+        return resp
+
     def handle_authn_response(self, context: Context, internal_resp):
         """
         See super class method satosa.frontends.base.FrontendModule#handle_authn_response
         :type context: satosa.context.Context
         :type internal_response: satosa.internal.InternalData
-        :rtype oic.utils.http_util.Response
+        :rtype satosa.response.SeeOther
         """
-
-        auth_req = self._get_authn_request_from_state(context.state)
-
         claims = self.converter.from_internal("openid", internal_resp.attributes)
-        # Filter unset claims
+        # Filter unset claims - TODO - less code here ...
         claims = {k: v for k, v in claims.items() if v}
-        self.user_db[internal_resp.subject_id] = dict(combine_claim_values(claims.items()))
-        auth_resp = self.provider.authorize(
-            auth_req,
-            internal_resp.subject_id,
-            extra_id_token_claims=lambda user_id, client_id:
-                self._get_extra_id_token_claims(user_id, client_id),
+        combined_claims = dict(
+            [i for i in combine_claim_values(claims.items())]
         )
 
+        response = self._handle_backend_response(context, internal_resp)
+
+        # TODO - why should we have to delete it?
         del context.state[self.name]
-        http_response = auth_resp.request(auth_req["redirect_uri"], should_fragment_encode(auth_req))
-        return SeeOther(http_response)
 
-    def handle_backend_error(self, exception):
-        """
-        See super class satosa.frontends.base.FrontendModule
-        :type exception: satosa.exception.SATOSAError
-        :rtype: oic.utils.http_util.Response
-        """
-        auth_req = self._get_authn_request_from_state(exception.state)
-        # If the client sent us a state parameter, we should reflect it back according to the spec
-        if 'state' in auth_req:
-            error_resp = AuthorizationErrorResponse(error="access_denied",
-                                                    error_description=exception.message,
-                                                    state=auth_req['state'])
-        else:
-            error_resp = AuthorizationErrorResponse(error="access_denied",
-                                                    error_description=exception.message)
-        msg = exception.message
-        logline = lu.LOG_FMT.format(id=lu.get_session_id(exception.state), message=msg)
-        logger.debug(logline)
-        return SeeOther(error_resp.request(auth_req["redirect_uri"], should_fragment_encode(auth_req)))
+        # TODO - session storage
+        # self.user_db[internal_resp.subject_id] = dict(combined_claims)
+        # ...
+        # store user claims for later fetch through userinfo
+        # here a session uid as key ...
+        with open('/tmp/data.txt', 'w') as outfile:
+            json.dump(combined_claims, outfile)
 
+        return response
 
-    def client_registration(self, context: Context):
-        """
-        Handle the OIDC dynamic client registration.
-        :type context: satosa.context.Context
-        :rtype: oic.utils.http_util.Response
-
-        :param context: the current context
-        :return: HTTP response to the client
-        """
-        raise NotImplementedError()
 
     def token_endpoint(self, context: Context):
         """
@@ -345,37 +455,69 @@ class OidcOpFrontend(FrontendModule):
         :param context: the current context
         :return: HTTP response to the client
         """
-        headers = {"Authorization": context.request_authorization}
-        try:
-            response = self.provider.handle_token_request(
-                urlencode(context.request),
-                headers,
-                lambda user_id, client_id: self._get_extra_id_token_claims(user_id, client_id))
-            return Response(response.to_json(), content="application/json")
-        except InvalidClientAuthentication as e:
-            logline = "invalid client authentication at token endpoint"
-            logger.debug(logline, exc_info=True)
-            error_resp = TokenErrorResponse(error='invalid_client', error_description=str(e))
-            response = Unauthorized(error_resp.to_json(), headers=[("WWW-Authenticate", "Basic")],
-                                    content="application/json")
-            return response
-        except OAuthError as e:
-            logline = "invalid request: {}".format(str(e))
-            logger.debug(logline, exc_info=True)
-            error_resp = TokenErrorResponse(error=e.oauth_error, error_description=str(e))
-            return BadRequest(error_resp.to_json(), content="application/json")
+        endpoint = self.app.endpoint_context.endpoint['token']
+        http_info = self._get_http_info(context)
+
+        # TODO
+        # self._fill_cdb(context)
+
+        # TODO
+        # detect and fill session db (load)
+
+        req_args = self._parse_request(
+            endpoint, context.request, context, http_info=http_info)
+
+        _args = self._process_request(context, endpoint, req_args, http_info)
+        if isinstance(_args, JsonResponse):
+            return _args
+
+        # better return jwt or jwe here!
+        return JsonResponse(_args['response_args'])
+
 
     def userinfo_endpoint(self, context: Context):
-        headers = {"Authorization": context.request_authorization}
+        endpoint = self.app.endpoint_context.endpoint['userinfo']
+        http_info = self._get_http_info(context)
 
-        try:
-            response = self.provider.handle_userinfo_request(
-                request=urlencode(context.request),
-                http_headers=headers,
-            )
-            return Response(response.to_json(), content="application/json")
-        except (BearerTokenError, InvalidAccessToken) as e:
-            error_resp = UserInfoErrorResponse(error='invalid_token', error_description=str(e))
-            response = Unauthorized(error_resp.to_json(), headers=[("WWW-Authenticate", AccessToken.BEARER_TOKEN_TYPE)],
-                                    content="application/json")
-            return response
+        # TODO
+        # self._fill_cdb(context)
+
+        # TODO
+        # detect and fill session db (load)
+        req_args = self._parse_request(
+            endpoint, context.request, context, http_info=http_info)
+
+        # here the bearer access token
+        # context.request_authorization
+        # TODO
+        claims = json.loads(open('/tmp/data.txt', 'r').read())
+
+        # runtime definition of userinfo db configuration
+        ec = endpoint.server_get('endpoint_context')
+        ec.userinfo.load(claims)
+
+        _args = self._process_request(context, endpoint, req_args, http_info)
+        # flush as soon as possible, otherwise in case of an exception it would be
+        # stored in the object ... until a next .load would happen ...
+        ec.userinfo.flush()
+
+        if isinstance(_args, JsonResponse):
+            return _args
+
+        # better return jwt or jwe here!
+        return JsonResponse(_args['response_args'])
+
+
+    def client_registration_endpoint(self, context: Context):
+        """
+        Handle the OIDC dynamic client registration.
+        :type context: satosa.context.Context
+        :rtype: oic.utils.http_util.Response
+
+        :param context: the current context
+        :return: HTTP response to the client
+        """
+        raise NotImplementedError()
+
+    def introspection_endpoint(self, context: Context):
+        raise NotImplementedError()

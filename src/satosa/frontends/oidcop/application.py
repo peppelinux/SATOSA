@@ -43,5 +43,6 @@ def oidcop_application(conf: dict):
     # app customs
     app.storage = conf.get('storage')
     app.default_target_backend = conf.get('default_target_backend')
+    app.salt_size = conf.get('salt_size', 8)
     # os.environ['OIDCOP_CONFIG'] = json.dumps(conf)
     return app
