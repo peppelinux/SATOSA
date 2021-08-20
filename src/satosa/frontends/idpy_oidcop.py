@@ -20,7 +20,6 @@ from urllib.parse import urlencode, urlparse
 from .base import FrontendModule
 from .oidcop.application import oidcop_application as oidcop_app
 from .oidcop.claims import *
-from .oidcop.models import get_client_by_id
 from .oidcop.user_info import SatosaOidcUserInfo
 from ..response import BadRequest, Created
 from ..response import SeeOther, JsonResponse, Response
@@ -53,10 +52,9 @@ class OidcOpUtils(object):
         client_id = context.request.get('client_id')
         _msg = f'Client {client_id} not found!'
         if client_id:
-            client = get_client_by_id(client_id)
+            client = self.app.storage.get_client_by_id(client_id)
             if client:
-                ec = self.app.endpoint_context
-                ec.endpoint_context.cdb = {
+                self.app.server.endpoint_context.cdb = {
                     client_id: client
                 }
         else:
@@ -166,7 +164,7 @@ class OidcOpFrontend(FrontendModule, OidcOpUtils):
         :param context: the current context
         :return: HTTP response to the client
         """
-        endpoint = self.app.endpoint_context.endpoint['provider_config']
+        endpoint = self.app.server.endpoint['provider_config']
         logger.info(f'Request at the "{endpoint.name}" endpoint')
         http_info = self._get_http_info(context)
 
@@ -222,6 +220,13 @@ class OidcOpFrontend(FrontendModule, OidcOpUtils):
                 'error_description': str(err),
             }, status="400")
 
+    def _log_request(self, context, request, msg:str, level:str = 'debug'):
+        _msg = f"{msg}: {request}"
+        logline = lu.LOG_FMT.format(
+            id=lu.get_session_id(context.state), message=msg
+        )
+        getattr(logger, level)(logline)
+
     def _handle_authn_request(self, context: Context, endpoint):
         """
         Parse and verify the authentication request into an internal request.
@@ -232,11 +237,7 @@ class OidcOpFrontend(FrontendModule, OidcOpUtils):
         :return: the internal request
         """
         request = urlencode(context.request)
-        msg = "Authn req from client: {}".format(request)
-        logline = lu.LOG_FMT.format(
-            id=lu.get_session_id(context.state), message=msg
-        )
-        logger.debug(logline)
+        self._log_request(context, request, "Authn req from client")
 
         http_info = self._get_http_info(context)
         parse_req = self._parse_request(
@@ -315,8 +316,9 @@ class OidcOpFrontend(FrontendModule, OidcOpUtils):
         OAuth2 / OIDC Authorization endpoint
         Checks client_id and handles the authorization request
         """
+        self._log_request(context, context.request, "Authorization endpoint request")
         self._fill_cdb(context)
-        _endpoint = self.app.endpoint_context.endpoint['authorization']
+        _endpoint = self.app.server.endpoint['authorization']
         internal_req = self._handle_authn_request(context, _endpoint)
         if not isinstance(internal_req, InternalData):
             return internal_req
@@ -336,17 +338,14 @@ class OidcOpFrontend(FrontendModule, OidcOpUtils):
         """
         http_info = self._get_http_info(context)
         oidc_req = context.state[self.name]['oidc_request']
-        endpoint = self.app.endpoint_context.endpoint['authorization']
+        endpoint = self.app.server.endpoint['authorization']
 
         # the same of authz_request ...
         # parse_req = self._parse_request(
             # _endpoint, oidc_req, context, http_info
         # )
         parse_req = AuthorizationRequest().from_urlencoded(oidc_req)
-
         proc_req = self._process_request(context, endpoint, parse_req, http_info)
-        # proc_req example:
-        #   {'http_response': None, 'return_uri': 'https://127.0.0.1:8090/authz_cb/satosa'}
 
         if isinstance(proc_req, JsonResponse):
             return proc_req
@@ -358,15 +357,14 @@ class OidcOpFrontend(FrontendModule, OidcOpUtils):
             uid=sub,
             salt=base64.b64encode(os.urandom(self.app.salt_size)).decode(),
             # TODO
-            #authn_info=auth_args['authn_class_ref'],
-            #authn_time=auth_args['iat']
+            # authn_info=auth_args['authn_class_ref'],
+            # authn_time=auth_args['iat']
         )
 
         _token_usage_rules = endpoint.server_get(
             "endpoint_context").authn_broker.get_method_by_id('user')
 
-        ec = self.app.endpoint_context
-        session_manager = ec.endpoint_context.session_manager
+        session_manager = self.app.server.endpoint_context.session_manager
         _session_id = session_manager.create_session(
             authn_event=authn_event,
             auth_req=parse_req,
@@ -403,7 +401,7 @@ class OidcOpFrontend(FrontendModule, OidcOpUtils):
             'response_placement', endpoint.response_placement
         )
         if _response_placement == 'body':
-            # TODO - not tested!
+            # TODO - not yet tested!
             logger.debug(f'Response [Body]: {info_response}')
             resp = Response(info_response)
         elif _response_placement == 'url':
@@ -455,30 +453,29 @@ class OidcOpFrontend(FrontendModule, OidcOpUtils):
         :param context: the current context
         :return: HTTP response to the client
         """
-        endpoint = self.app.endpoint_context.endpoint['token']
+        endpoint = self.app.server.endpoint['token']
         http_info = self._get_http_info(context)
-
-        # TODO
-        # self._fill_cdb(context)
+        self._log_request(context, context.request, "Token endpoint request")
+        self._fill_cdb(context)
 
         # TODO
         # detect and fill session db (load)
-
         req_args = self._parse_request(
-            endpoint, context.request, context, http_info=http_info)
+            endpoint, context.request, context, http_info=http_info
+        )
 
-        _args = self._process_request(context, endpoint, req_args, http_info)
-        if isinstance(_args, JsonResponse):
-            return _args
+        proc_req = self._process_request(context, endpoint, req_args, http_info)
+        if isinstance(proc_req, JsonResponse):
+            return proc_req
 
         # better return jwt or jwe here!
-        return JsonResponse(_args['response_args'])
+        return JsonResponse(proc_req['response_args'])
 
 
     def userinfo_endpoint(self, context: Context):
-        endpoint = self.app.endpoint_context.endpoint['userinfo']
+        endpoint = self.app.server.endpoint['userinfo']
         http_info = self._get_http_info(context)
-
+        self._log_request(context, context.request, "Userinfo endpoint request")
         # TODO
         # self._fill_cdb(context)
 
@@ -506,7 +503,6 @@ class OidcOpFrontend(FrontendModule, OidcOpUtils):
 
         # better return jwt or jwe here!
         return JsonResponse(_args['response_args'])
-
 
     def client_registration_endpoint(self, context: Context):
         """

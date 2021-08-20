@@ -7,16 +7,21 @@ config:
     base_url: &base_url https://localhost:10000
 
     storage:
-        client:
-            class: "that-class"
-            kwargs:
-                - a: b
-                - c: d
-        sessions:
-            class: "that-class"
-            kwargs:
-                - a: b
-                - c: d
+        class: "satosa.frontends.oidcop.storage.mongo.Mongodb"
+        kwargs:
+            url: mongodb://172.21.0.3:27017/oidcop
+            connection_params:
+                username: satosa
+                password: thatpassword
+                connectTimeoutMS: 5000
+                socketTimeoutMS: 5000
+                serverSelectionTimeoutMS: 5000
+        db_name: oidcop
+        collections:
+            # type: collection name
+            session: session
+            client: client
+
 
     default_target_backend: spidSaml2
     salt_size: 8
@@ -70,30 +75,6 @@ config:
           subject_types_supported:
           - public
           - pairwise
-        # untill SATOSA won't support logout the oidcop cookies are quite useless
-        #cookie_handler:
-          #class: oidcop.cookie_handler.CookieHandler
-          #kwargs:
-            #flags:
-              #httponly: true
-              #samesite: None
-              #secure: true
-            #keys:
-              #key_defs:
-              #- kid: enc
-                #type: OCT
-                #use:
-                #- enc
-              #- kid: sig
-                #type: OCT
-                #use:
-                #- sig
-              #private_path: data/oidc_op/private/cookie_jwks.json
-              #read_only: false
-            #name:
-              #register: oidc_op_rp
-              #session: oidc_op
-              #session_management: sman
         endpoint:
           provider_info:
             class: oidcop.oidc.provider_config.ProviderConfiguration
@@ -250,3 +231,27 @@ config:
           #kwargs:
             #whatever:
               #key: value
+        # until SATOSA won't support logout the oidcop cookies are quite useless
+        #cookie_handler:
+          #class: oidcop.cookie_handler.CookieHandler
+          #kwargs:
+            #flags:
+              #httponly: true
+              #samesite: None
+              #secure: true
+            #keys:
+              #key_defs:
+              #- kid: enc
+                #type: OCT
+                #use:
+                #- enc
+              #- kid: sig
+                #type: OCT
+                #use:
+                #- sig
+              #private_path: data/oidc_op/private/cookie_jwks.json
+              #read_only: false
+            #name:
+              #register: oidc_op_rp
+              #session: oidc_op
+              #session_management: sman
