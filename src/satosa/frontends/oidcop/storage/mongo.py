@@ -31,3 +31,9 @@ class Mongodb(SatosaOidcStorage):
         if res.count():
             # it returns the first one
             return res.next()
+
+    def store_session_to_db(self, ses_man_dump:dict, **kwargs):
+        raise NotImplementedError()
+
+    def load_session_from_db(self, req_args, http_headers, session_manager, **kwargs):
+        raise NotImplementedError()
