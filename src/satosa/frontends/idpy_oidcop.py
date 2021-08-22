@@ -102,6 +102,38 @@ class OidcOpUtils(object):
             }
         return http_info
 
+    def _check_session_dump_consistency(self, endpoint, session):
+        """
+        Checks if the session dump matches with the one in the DB
+        """
+        ec = self.app.server.endpoint_context
+        _dump = ec.session_manager.dump()
+        if _dump != session:
+            logger.critical(_dump, session)
+            ec.session_manager.flush()
+            raise InconsinstentSessionDump(endpoint.name)
+
+    def load_session_in_db(self, endpoint):
+        ec = self.app.server.endpoint_context
+        ses_man_dump = ec.session_manager.dump()
+        # session db mngmtn
+        try:
+            #
+            pass
+            # breakpoint()
+        except InconsinstentSessionDump as e:
+            logger.critical(e)
+            ec.session_manager.flush()
+            return JsonResponse(json.dumps({
+                'error': 'invalid_request',
+                'error_description': str(e),
+            }), status="500")
+        else:
+            pass
+            #  logger.warning(endpoint.__class__.__name__)
+            #self._check_session_dump_consistency(endpoint, ses_man_dump)
+        # ec.session_manager.flush()
+
 
 class OidcOpFrontend(FrontendModule, OidcOpUtils):
     """
@@ -318,8 +350,8 @@ class OidcOpFrontend(FrontendModule, OidcOpUtils):
         """
         self._log_request(context, context.request, "Authorization endpoint request")
         self._fill_cdb(context)
-        _endpoint = self.app.server.endpoint['authorization']
-        internal_req = self._handle_authn_request(context, _endpoint)
+        endpoint = self.app.server.endpoint['authorization']
+        internal_req = self._handle_authn_request(context, endpoint)
         if not isinstance(internal_req, InternalData):
             return internal_req
 
@@ -412,6 +444,7 @@ class OidcOpFrontend(FrontendModule, OidcOpUtils):
         else:
             raise NotImplementedError()
 
+        self.load_session_in_db(endpoint)
         return resp
 
     def handle_authn_response(self, context: Context, internal_resp):
@@ -469,6 +502,7 @@ class OidcOpFrontend(FrontendModule, OidcOpUtils):
             return proc_req
 
         # better return jwt or jwe here!
+        self.load_session_in_db(endpoint)
         return JsonResponse(proc_req['response_args'])
 
 
@@ -502,6 +536,7 @@ class OidcOpFrontend(FrontendModule, OidcOpUtils):
             return _args
 
         # better return jwt or jwe here!
+        self.load_session_in_db(endpoint)
         return JsonResponse(_args['response_args'])
 
     def client_registration_endpoint(self, context: Context):
