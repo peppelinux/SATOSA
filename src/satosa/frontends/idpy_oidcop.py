@@ -3,6 +3,7 @@ The OpenID Connect frontend module for the satosa proxy
 """
 import base64
 import json
+import oidcmsg
 import logging
 import os
 
@@ -43,6 +44,16 @@ class OidcOpUtils(object):
     Interoperability class between satosa and oidcop
     """
 
+    def _fill_cdb_by_client_id(self, client_id):
+        client = self.app.storage.get_client_by_id(client_id)
+        if client:
+            self.app.server.endpoint_context.cdb = {
+                client_id: client
+            }
+        logger.debug(
+            f"Loaded oidcop client from {self.app.storage}: {client}"
+        )
+
     def _fill_cdb_from_request(self, context: Context) -> None:
         """
             gets client_id from local storage and updates the client DB
@@ -50,20 +61,10 @@ class OidcOpUtils(object):
         client_id = context.request.get('client_id')
         _msg = f'Client {client_id} not found!'
         if client_id:
-            client = self.app.storage.get_client_by_id(client_id)
-            if client:
-                self.app.server.endpoint_context.cdb = {
-                    client_id: client
-                }
+            self._fill_cdb_by_client_id(client_id)
         else:
             logger.warning(_msg)
             raise InvalidClient(_msg)
-
-    def _load_storage(self):
-        """
-        Loads SATOSA custom oidcop storage
-        """
-        self.storage = self.app["storage"]
 
     def _get_http_headers(self, context: Context):
         """
@@ -100,34 +101,26 @@ class OidcOpUtils(object):
             }
         return http_headers
 
-    def _check_session_dump_consistency(self, endpoint, session):
-        """
-        Checks if the session dump matches with the one in the DB
-        """
-        ec = self.app.server.endpoint_context
-        _dump = ec.session_manager.dump()
-        if _dump != session:
-            logger.critical(_dump, session)
-            ec.session_manager.flush()
-            raise InconsinstentSessionDump(endpoint.name)
-
-    def store_session_to_db(self):
-        ses_man_dump = self.app.server.endpoint_context.session_manager.dump()
-        # session db mngmtn
-        # self.app.storage.store_session_to_db(ses_man_dump)
+    def store_session_to_db(self, claims = None):
+        sman = self.app.server.endpoint_context.session_manager
+        self.app.storage.store_session_to_db(sman, claims)
+        logger.debug(f"Stored oidcop session to db: {sman.dump()}")
 
     def load_session_from_db(self, parse_req, http_headers):
-        self.app.storage.load_session_from_db(
-            parse_req, http_headers, self.app.server.endpoint_context.session_manager
-        )
+        if isinstance(parse_req, oidcmsg.oidc.AuthorizationRequest):
+            return
+        sman = self.app.server.endpoint_context.session_manager
+        self.app.storage.load_session_from_db(parse_req, http_headers, sman)
+        logger.debug(f"Loaded oidcop session from db: {sman.dump()}")
 
     def _flush_inmem_session(self):
         """
         each OAuth2/OIDC request loads an oidcop session in memory
         this method will simply free the memory from any loaded session
         """
-        # self.app.server.endpoint_context.session_manager.flush()
-        pass
+        self.app.server.endpoint_context.cdb = {}
+        sman = self.app.server.endpoint_context.session_manager
+        sman.flush()
 
     def _prepare_oidcendpoint(self, parse_req, endpoint, http_headers):
         """
@@ -137,10 +130,12 @@ class OidcOpUtils(object):
         # endpoint ... things ...
 
         # loads session from db
-        # self.app.storage.load_session_from_db(
-            # parse_req, http_headers, self.app.server.endpoint_context.session_manager
-        # )
-        pass
+        data = self.load_session_from_db(parse_req, http_headers)
+        # detect client_id and fill client inmemory database
+        if data:
+            self._fill_cdb_by_client_id(data['client_id'])
+        elif parse_req.get('client_id'):
+            self._fill_cdb_by_client_id(parse_req['client_id'])
 
     def send_response(self, response):
         self._flush_inmem_session()
@@ -225,7 +220,7 @@ class OidcOpFrontend(FrontendModule, OidcOpUtils):
         response = JsonResponse(msg, status=status)
         return self.send_response(response)
 
-    def _parse_request(self, endpoint, context: Context, http_headers=None):
+    def _parse_request(self, endpoint, context: Context, http_headers: dict = None):
         """
         Returns a parsed OAuth2/OIDC request,
         used by Authorization, Token, Userinfo and Introspection enpoints views
@@ -399,6 +394,7 @@ class OidcOpFrontend(FrontendModule, OidcOpUtils):
         # )
         parse_req = AuthorizationRequest().from_urlencoded(urlencode(oidc_req))
         proc_req = self._process_request(context, endpoint, parse_req, http_headers)
+        self._prepare_oidcendpoint(parse_req, endpoint, http_headers)
 
         if isinstance(proc_req, JsonResponse):
             return self.send_response(proc_req)
@@ -467,8 +463,7 @@ class OidcOpFrontend(FrontendModule, OidcOpUtils):
             self._flush_inmem_session()
             raise NotImplementedError()
 
-        self.store_session_to_db()
-        return self.send_response(resp)
+        return resp
 
     def handle_authn_response(self, context: Context, internal_resp):
         """
@@ -477,28 +472,19 @@ class OidcOpFrontend(FrontendModule, OidcOpUtils):
         :type internal_response: satosa.internal.InternalData
         :rtype satosa.response.SeeOther
         """
-        claims = self.converter.from_internal("openid", internal_resp.attributes)
+        _claims = self.converter.from_internal("openid", internal_resp.attributes)
         # Filter unset claims - TODO - less code here ...
-        claims = {k: v for k, v in claims.items() if v}
+        claims = {k: v for k, v in _claims.items() if v}
         combined_claims = dict(
             [i for i in combine_claim_values(claims.items())]
         )
 
         response = self._handle_backend_response(context, internal_resp)
-
         # TODO - why should we have to delete it?
         del context.state[self.name]
 
-        # TODO - session storage
-        # self.user_db[internal_resp.subject_id] = dict(combined_claims)
-        # ...
-        # store user claims for later fetch through userinfo
-        # here a session uid as key ...
-        with open('/tmp/data.txt', 'w') as outfile:
-            json.dump(combined_claims, outfile)
-
+        self.store_session_to_db(claims = combined_claims)
         return self.send_response(response)
-
 
     def token_endpoint(self, context: Context):
         """
@@ -513,13 +499,12 @@ class OidcOpFrontend(FrontendModule, OidcOpUtils):
         endpoint = self.app.server.endpoint['token']
         http_headers = self._get_http_headers(context)
 
-        # TODO
-        #self._fill_cdb_from_request(context)
+        raw_request = AccessTokenRequest().from_urlencoded(urlencode(context.request))
+        self._prepare_oidcendpoint(raw_request, endpoint, http_headers)
 
         parse_req = self._parse_request(
             endpoint, context, http_headers=http_headers
         )
-        self._prepare_oidcendpoint(parse_req, endpoint, http_headers)
 
         proc_req = self._process_request(context, endpoint, parse_req, http_headers)
         if isinstance(proc_req, JsonResponse):
@@ -535,21 +520,28 @@ class OidcOpFrontend(FrontendModule, OidcOpUtils):
         endpoint = self.app.server.endpoint['userinfo']
         http_headers = self._get_http_headers(context)
 
-        # TODO
-        #self._fill_cdb(context)
+        self._prepare_oidcendpoint({}, endpoint, http_headers)
 
         parse_req = self._parse_request(
             endpoint, context, http_headers=http_headers)
         self._prepare_oidcendpoint(parse_req, endpoint, http_headers)
 
-        # here the bearer access token
-        # context.request_authorization
-        # TODO
-        claims = json.loads(open('/tmp/data.txt', 'r').read())
-
-        # runtime definition of userinfo db configuration
+        # Load claims
+        claims = {}
+        sman = self.app.server.endpoint_context.session_manager
+        for k,v in sman.dump()['db'].items():
+            if v[0] == 'oidcop.session.grant.Grant':
+                sid = k
+                claims = self.app.storage.get_claims_from_sid(sid)
+                break
+        else:
+            logger.warning(
+                "UserInfo endoint: Can't find any suitable sid from session_manager"
+            )
+        # That's a patchy runtime definition of userinfo db configuration
         ec = endpoint.server_get('endpoint_context')
         ec.userinfo.load(claims)
+        # end load claims
 
         proc_req = self._process_request(context, endpoint, parse_req, http_headers)
         # flush as soon as possible, otherwise in case of an exception it would be
