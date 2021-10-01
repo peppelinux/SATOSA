@@ -64,7 +64,9 @@ class Mongodb(SatosaOidcStorage):
             "sid": "",
             "sid_encrypted": "",
             "authorization_code": "",
-            "access_token": "",
+            # access token SHOULD BE unique so it can't be stored as ""
+            # otherwise on each auth code it would be "" and raises "pymongo.errors.DuplicateKeyError"
+            #"access_token": "",
             "id_token": "",
             "refresh_token": "",
             "claims": claims or {},
