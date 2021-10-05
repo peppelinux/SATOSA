@@ -282,7 +282,7 @@ class SATOSABase(object):
                 raise SATOSAUnknownErrorRedirectUrl((redirect_url, logline))
             else:
                 raise SATOSAUnknownError("Unknown error") from err
-             
+
         return resp
 
 
