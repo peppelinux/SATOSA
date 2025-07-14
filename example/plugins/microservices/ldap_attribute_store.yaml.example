@@ -27,6 +27,9 @@ config:
       # pool_keepalive: seconds to wait between calls to server to keep the
       # connection alive; default: 10
       pool_keepalive: 10
+      # pool_lifetime: number of seconds before recreating a new connection
+      # in a pooled connection strategy.
+      pool_lifetime: None
 
       # Attributes to return from LDAP query.
       query_return_attributes:
@@ -84,6 +87,13 @@ config:
 
       ldap_identifier_attribute: uid
 
+      # Override the contructed search_filter with ldap_identifier_attribute
+      # with an own filter. This allows more complex queries.
+      # {0} will be injected with the ordered_identifier_candidates.
+      # For example:
+      # search_filter: "(&(uid={0})(isMemberOf=authorized))"
+      search_filter: None
+
       # Whether to clear values for attributes incoming
       # to this microservice. Default is no or false.
       clear_input_attributes: no
@@ -93,17 +103,31 @@ config:
       user_id_from_attrs:
         - employeeNumber
 
+      # If true, do not only process the first ldap result, but iterate over
+      # the result and process all of them.
+      use_all_results: false
+
       # Where to redirect the browser if no record is returned
       # from LDAP. The default is not to redirect.
       on_ldap_search_result_empty: https://my.vo.org/please/go/enroll
 
-  # The microservice may be configured per entityID.
+  # The microservice may be configured per entityID or per extracted attribute.
   # The configuration key is the entityID of the requesting SP,
-  # the authenticating IdP, or the entityID of the CO virtual IdP.
-  # When more than one configured entityID matches during a flow
-  # the priority ordering is requesting SP, then authenticating IdP, then
+  # the authenticating IdP, the entityID of the CO virtual IdP, or the
+  # extracted attribute defined by `global.provider_attribute`.
+  # When more than one configured key matches during a flow
+  # the priority ordering is provider attribute, requesting SP, then authenticating IdP, then
   # CO virtual IdP. Αny missing parameters are taken from the
   # default configuration.
+  global:
+    provider_attribute: domain
+
+  # domain attribute is extracted in a previous microserver and used as a key
+  # here.
+  company.com:
+    ldap_url: ldaps://ldap.company.com
+    search_base: ou=group,dc=identity,dc=company,dc=com
+
   https://sp.myserver.edu/shibboleth-sp:
     search_base: ou=People,o=MyVO,dc=example,dc=org
     search_return_attributes:
@@ -120,3 +144,4 @@ config:
   # The microservice may be configured to ignore a particular entityID.
   https://another.sp.myserver.edu:
     ignore: true
+
